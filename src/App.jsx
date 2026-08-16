@@ -40,6 +40,12 @@ function enlaceContacto(medio, valor) {
   return `https://wa.me/57${v.replace(/\D/g, "")}`;
 }
 
+// Acepta enlaces de Google Maps (compartir desde la app o el navegador).
+function esEnlaceMapa(v) {
+  const t = (v || "").trim();
+  return /^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|www\.google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)\//i.test(t);
+}
+
 function CampoContacto({ medio, valor, onMedio, onValor, placeholderNombre }) {
   const m = medio || "WhatsApp";
   return (
@@ -227,6 +233,12 @@ function Ficha({ r, resultado, nombres, onReencontrar }) {
                 >
                   Escribir a {r.contacto_nombre}{r.contacto_medio && r.contacto_medio !== "WhatsApp" ? ` por ${r.contacto_medio}` : ""}
                 </a>
+                {r.lugar_mapa && (
+                  <a href={r.lugar_mapa} target="_blank" rel="noreferrer" style={{
+                    background: "transparent", border: `1.5px solid ${T.verde}`, color: T.verde,
+                    textDecoration: "none", padding: "9px 13px", borderRadius: 8, fontSize: 13.5, fontWeight: 600,
+                  }}>Cómo llegar</a>
+                )}
                 <button
                   type="button" onClick={() => onReencontrar(r)}
                   style={{
@@ -485,6 +497,7 @@ export default function App() {
   const [errorGuardar, setErrorGuardar] = useState("");
   const [guardado, setGuardado] = useState(null);
   const [duplicados, setDuplicados] = useState(null);
+  const [mostrarMapa, setMostrarMapa] = useState(false);
 
   const [filtroEspecie, setFiltroEspecie] = useState("");
   const [filtroMuni, setFiltroMuni] = useState("");
@@ -549,6 +562,10 @@ export default function App() {
       setErrorGuardar("Faltan datos obligatorios. Revisa especie, tamaño, color, ubicación y contacto.");
       return;
     }
+    if (reporte.lugar_mapa && !esEnlaceMapa(reporte.lugar_mapa)) {
+      setErrorGuardar("El enlace del sitio debe ser de Google Maps (empieza por https://maps.app.goo.gl/ o https://www.google.com/maps/).");
+      return;
+    }
 
     // Antes de guardar, buscar si el mismo animal ya esta registrado
     // (mismo municipio, fechas cercanas, rasgos muy parecidos).
@@ -585,6 +602,7 @@ export default function App() {
       setRegistros((p) => [data, ...p]);
       setGuardado(data.codigo);
       setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+      setMostrarMapa(false);
       setArchivoFoto(null);
     } catch (e) {
       setErrorGuardar(e.message);
@@ -827,6 +845,25 @@ export default function App() {
                 onChange={(e) => setR("lugar", e.target.value)} placeholder="Ej.: Albergue Huellas de Esperanza" />
             </Campo>
 
+            <Campo numero="14b" titulo="¿Mostrar cómo llegar al sitio?" opcional
+              ayuda="Solo si quieres que la ubicación del refugio o del sitio quede visible en la ficha. En Google Maps busca el lugar, toca Compartir y copia el enlace.">
+              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <Opcion activo={!mostrarMapa} onClick={() => { setMostrarMapa(false); setR("lugar_mapa", null); }}>No mostrar</Opcion>
+                  <Opcion activo={mostrarMapa} onClick={() => setMostrarMapa(true)}>Sí, mostrar</Opcion>
+                </div>
+                {mostrarMapa && (
+                  <>
+                    <input style={entradaTexto} inputMode="url" value={reporte.lugar_mapa || ""}
+                      onChange={(e) => setR("lugar_mapa", e.target.value)} placeholder="https://maps.app.goo.gl/…" />
+                    {reporte.lugar_mapa && !esEnlaceMapa(reporte.lugar_mapa) && (
+                      <span style={{ fontSize: 13, color: T.rojo }}>Ese no parece un enlace de Google Maps.</span>
+                    )}
+                  </>
+                )}
+              </div>
+            </Campo>
+
             <Campo numero="15" titulo="Quién responde y por dónde"
               ayuda="Este nombre y contacto se publican en la ficha para que el tutor escriba. Pon el del refugio o un número que puedas mostrar; no uses uno personal si no quieres que quede visible.">
               <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
@@ -866,6 +903,7 @@ export default function App() {
                   <button type="button" onClick={() => {
                     setDuplicados(null);
                     setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+      setMostrarMapa(false);
                     setArchivoFoto(null);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }} style={{
