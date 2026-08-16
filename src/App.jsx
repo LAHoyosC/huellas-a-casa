@@ -176,6 +176,14 @@ function Ficha({ r, resultado, nombres, onReencontrar }) {
             </p>
           )}
 
+          {r.fuente_url && /^https?:\/\//i.test(r.fuente_url) && (
+            <p style={{ margin: "8px 0 0", fontSize: 13 }}>
+              <a href={r.fuente_url} target="_blank" rel="noreferrer noopener" style={{ color: T.tintaSuave }}>
+                Ver publicación original ↗
+              </a>
+            </p>
+          )}
+
           {resultado?.corroborados?.length > 0 && (
             <div style={{ marginTop: 11, padding: "9px 11px", background: T.verdeClaro, borderRadius: 9 }}>
               <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: ".1em", color: T.verde, marginBottom: 5 }}>
@@ -333,8 +341,14 @@ function Aviso() {
   );
 }
 
+const botonFoto = {
+  padding: "12px 16px", borderRadius: 9, border: `1.5px dashed ${T.linea}`,
+  background: T.blanco, fontSize: 14.5, fontWeight: 560, cursor: "pointer",
+};
+
 function CargarFoto({ archivo, onArchivo }) {
-  const ref = useRef(null);
+  const refCamara = useRef(null);
+  const refCarrete = useRef(null);
   const [vista, setVista] = useState(null);
   const [error, setError] = useState("");
 
@@ -357,16 +371,17 @@ function CargarFoto({ archivo, onArchivo }) {
         {vista && (
           <img src={vista} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 9, border: `1px solid ${T.linea}` }} />
         )}
-        <button
-          type="button" onClick={() => ref.current?.click()}
-          style={{
-            padding: "12px 16px", borderRadius: 9, border: `1.5px dashed ${T.linea}`,
-            background: T.blanco, fontSize: 14.5, fontWeight: 560, cursor: "pointer",
-          }}
-        >
-          {archivo ? "Cambiar foto" : "Tomar o subir foto"}
-        </button>
-        <input ref={ref} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={elegir} />
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button type="button" onClick={() => refCamara.current?.click()} style={botonFoto}>
+            {archivo ? "Tomar otra" : "Tomar foto"}
+          </button>
+          <button type="button" onClick={() => refCarrete.current?.click()} style={botonFoto}>
+            {archivo ? "Elegir otra" : "Elegir del carrete"}
+          </button>
+        </div>
+        {/* Con capture el celular abre la camara; sin capture, la galeria. */}
+        <input ref={refCamara} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={elegir} />
+        <input ref={refCarrete} type="file" accept="image/*" style={{ display: "none" }} onChange={elegir} />
       </div>
       {error && <p style={{ margin: "8px 0 0", fontSize: 13, color: T.rojo }}>{error}</p>}
     </div>
@@ -561,6 +576,10 @@ export default function App() {
     const faltan = obligatorios.filter((k) => !reporte[k]);
     if (faltan.length) {
       setErrorGuardar("Faltan datos obligatorios. Revisa especie, tamaño, color, ubicación y contacto.");
+      return;
+    }
+    if (reporte.fuente_url && !/^https?:\/\/\S+$/i.test(reporte.fuente_url.trim())) {
+      setErrorGuardar("El enlace de la publicación original debe empezar por http:// o https://.");
       return;
     }
     if (reporte.lugar_mapa && !esEnlaceMapa(reporte.lugar_mapa)) {
@@ -889,6 +908,15 @@ export default function App() {
               valor={reporte.nota} onCambio={(v) => setR("nota", v)}
               placeholder="Ej.: muy asustadito, se esconde. Tiene el hocico canoso."
             />
+
+            <Campo numero="17" titulo="Enlace de la publicación original" opcional
+              ayuda="Si esta información viene de Instagram, Facebook u otra página, pega aquí el enlace. Así se puede volver a la fuente.">
+              <input style={entradaTexto} inputMode="url" value={reporte.fuente_url || ""}
+                onChange={(e) => setR("fuente_url", e.target.value)} placeholder="https://www.instagram.com/p/…" />
+              {reporte.fuente_url && !/^https?:\/\/\S+$/i.test(reporte.fuente_url.trim()) && (
+                <span style={{ display: "block", marginTop: 6, fontSize: 13, color: T.rojo }}>Debe empezar por http:// o https://</span>
+              )}
+            </Campo>
 
             {duplicados && (
               <section style={{
