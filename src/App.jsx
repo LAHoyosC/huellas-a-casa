@@ -624,6 +624,11 @@ export default function App() {
       <style>{`* { box-sizing: border-box; } body { margin: 0; }
         button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid ${T.ambar}; outline-offset: 2px; }`}</style>
 
+      {import.meta.env.VITE_ENTORNO === "staging" && (
+        <div style={{ background: T.violeta, color: T.blanco, textAlign: "center", padding: "6px 10px", fontSize: 13, fontWeight: 600 }}>
+          ENTORNO DE PRUEBAS — lo que registres aquí no es real y se puede borrar
+        </div>
+      )}
       <header style={{ borderBottom: `1px solid ${T.linea}`, background: T.blanco }}>
         <div style={{ maxWidth: 940, margin: "0 auto", padding: "20px 20px 18px" }}>
           <div style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".18em", color: T.tintaSuave }}>

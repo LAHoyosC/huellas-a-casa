@@ -17,8 +17,8 @@ Después de esto la página queda en:
    paso 6). Región: **East US (North Virginia)**. Plan: **Free**.
 3. Espera a que termine de crearse (1-2 min).
 4. Menú izquierdo → **SQL Editor** → **New query**. Pega el contenido
-   completo de [`supabase/schema.sql`](supabase/schema.sql) y dale **Run**.
-   Debe terminar sin errores. Solo se corre una vez.
+   completo de cada archivo de [`supabase/migrations/`](supabase/migrations/) **en orden**
+   (primero `…_esquema.sql`, luego los siguientes) y dale **Run** a cada uno.
 5. Menú izquierdo → **Storage**: debe aparecer un bucket `fotos` (lo creó
    el paso anterior). Si no está, créalo con **New bucket**, nombre `fotos`,
    marcado como **Public bucket**.
@@ -29,7 +29,7 @@ Después de esto la página queda en:
 
    Estos dos valores son públicos por diseño. Van dentro del navegador de
    cualquiera que abra la página. La seguridad no está en esconderlos sino
-   en las reglas que ya instaló el `schema.sql`.
+   en las reglas que ya instalaron las migraciones.
 
 ---
 
@@ -98,3 +98,24 @@ La página funciona igual en Cloudflare Pages: conectar el repositorio,
 build `npm run build`, salida `dist`, y las mismas dos variables de
 entorno. En ese caso **no** se define `VITE_BASE`. GitHub Pages sirve
 bien mientras tanto y no exige registrar tarjeta.
+
+---
+
+## Staging (pruebas)
+
+Hay un segundo proyecto de Supabase, `huellas-a-casa-staging`, con el mismo
+esquema. Cada rama distinta de `main` se compila en Cloudflare contra esa
+base (lo decide `scripts/build.mjs`) y muestra una franja morada «ENTORNO
+DE PRUEBAS». Los datos que se registren ahí no son reales y se pueden
+borrar.
+
+Regla: **todo cambio de esquema se aplica primero en staging**, se prueba
+en la URL de vista previa del PR, y solo después se aplica en producción y
+se mergea.
+
+Aplicar migraciones con la CLI (requiere `npx supabase login`):
+
+```bash
+npx supabase link --project-ref jvgcwbxwjxtmkpdhyjcv   # staging
+npx supabase db push
+```
