@@ -30,7 +30,7 @@ No necesitas cuenta de AWS. Supabase corre sobre servidores de Amazon pero tú s
 
 1. Crea una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo.
 2. **Elige la región con cuidado: es prácticamente permanente.** Para Colombia, `us-east-1` (Virginia) suele responder mejor que São Paulo, porque el tráfico colombiano sale por Miami.
-3. Abre **SQL Editor**, pega [`supabase/schema.sql`](supabase/schema.sql) completo y dale RUN.
+3. Abre **SQL Editor**, pega los archivos de [`supabase/migrations/`](supabase/migrations/), en orden, completo y dale RUN.
 4. En **Project Settings → API** copia el Project URL y la llave `anon`.
 
 ### 2. Variables
@@ -147,5 +147,5 @@ src/lib/conceptos.js     Diccionario de sinónimos  ← editable por cualquiera
 src/lib/coincidencia.js  Motor de puntaje
 src/lib/foto.js          Compresión y subida
 src/App.jsx              Interfaz
-supabase/schema.sql      Tablas, RLS, auditoría
+supabase/migrations/     Esquema (tablas, RLS, auditoría) y migraciones, en orden
 ```

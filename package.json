@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/build.mjs",
+    "build:staging": "vite build --mode staging",
     "preview": "vite preview"
   },
   "dependencies": {
