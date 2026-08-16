@@ -1,0 +1,55 @@
+name: Respaldo diario
+
+# Saca una copia completa de la base todas las noches y la guarda en
+# este mismo repositorio. Es lo unico que los protege de un borrado
+# accidental: el plan gratuito de Supabase NO tiene backups.
+#
+# Configurar una sola vez:
+#   Settings > Secrets and variables > Actions > New repository secret
+#   Nombre: SUPABASE_DB_URL
+#   Valor:  la cadena de conexion de Supabase
+#           (Project Settings > Database > Connection string > URI)
+
+on:
+  schedule:
+    - cron: "0 7 * * *"   # 2:00 a.m. hora de Colombia
+  workflow_dispatch:       # y tambien a mano, desde la pestana Actions
+
+jobs:
+  respaldar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar cliente de Postgres
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Sacar la copia
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          mkdir -p respaldos
+          FECHA=$(date +%Y-%m-%d)
+          pg_dump "$SUPABASE_DB_URL" \
+            --no-owner --no-privileges \
+            --schema=public \
+            | gzip > "respaldos/huellas-a-casa-$FECHA.sql.gz"
+          ls -lh respaldos/
+
+      - name: Dejar solo los ultimos 30 dias
+        run: |
+          cd respaldos
+          ls -1t *.sql.gz | tail -n +31 | xargs -r rm --
+          cd ..
+
+      - name: Guardar en el repositorio
+        run: |
+          git config user.name  "respaldo-automatico"
+          git config user.email "actions@github.com"
+          git add respaldos/
+          git diff --staged --quiet || git commit -m "Respaldo $(date +%Y-%m-%d)"
+          git push

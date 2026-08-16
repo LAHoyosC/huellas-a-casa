@@ -1,0 +1,33 @@
+name: Mantener el proyecto despierto
+
+# Los proyectos gratuitos de Supabase se pausan solos despues de 7 dias
+# sin consultas. Si eso pasa, la pagina queda muerta hasta que alguien
+# entre al panel a despausarla a mano. Esto lo evita.
+#
+# Configurar una sola vez, como secretos del repositorio:
+#   SUPABASE_URL       -> https://xxxx.supabase.co
+#   SUPABASE_ANON_KEY  -> la llave anon (es publica, no pasa nada)
+
+on:
+  schedule:
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+
+jobs:
+  despertar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar la base
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          CODIGO=$(curl -s -o /dev/null -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/mascotas?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "Respuesta: $CODIGO"
+          if [ "$CODIGO" != "200" ]; then
+            echo "La base no respondio bien. Revisar el proyecto en Supabase."
+            exit 1
+          fi

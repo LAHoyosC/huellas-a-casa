@@ -1,0 +1,739 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { supabase } from "./lib/supabase.js";
+import { subirFoto, comprimir } from "./lib/foto.js";
+import { buscarCoincidencias } from "./lib/coincidencia.js";
+import { extraerConceptos, etiquetaDe } from "./lib/conceptos.js";
+import {
+  ESPECIE, TAMANO, TAMANO_PISTA, COLOR, COLOR_MUESTRA, PELO, SEXO, EDAD,
+  OREJAS, COLA, SENAS, COLOR_COLLAR, CUSTODIO, MUNICIPIOS,
+} from "./lib/catalogo.js";
+
+const T = {
+  papel: "#F6F4F0", papelHondo: "#EBE7E0", tinta: "#1B2029", tintaSuave: "#5A6272",
+  linea: "#D8D2C8", verde: "#2F6F5E", verdeClaro: "#E4EFEA", ambar: "#D9922B",
+  ambarClaro: "#FBF0DC", violeta: "#6B4E8F", violetaClaro: "#EFE9F5",
+  rojo: "#B03A28", blanco: "#FFFFFF",
+};
+
+const FUENTE = `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+const MONO = `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+
+const entradaTexto = {
+  width: "100%", maxWidth: 420, padding: "11px 12px", borderRadius: 9,
+  border: `1.5px solid ${T.linea}`, background: T.blanco, fontSize: 15,
+  color: T.tinta, fontFamily: FUENTE, boxSizing: "border-box",
+};
+
+/* ------------------------------ PIEZAS ----------------------------- */
+
+function Opcion({ activo, onClick, children, muestra }) {
+  return (
+    <button
+      type="button" onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 13px",
+        borderRadius: 9, border: `1.5px solid ${activo ? T.verde : T.linea}`,
+        background: activo ? T.verdeClaro : T.blanco, color: activo ? T.verde : T.tinta,
+        fontWeight: activo ? 650 : 500, fontSize: 14.5, lineHeight: 1.2,
+        cursor: "pointer", textAlign: "left", minHeight: 44,
+      }}
+    >
+      {muestra && (
+        <span style={{ width: 15, height: 15, borderRadius: 4, flexShrink: 0, background: muestra, border: "1px solid rgba(0,0,0,.18)" }} />
+      )}
+      <span>{children}</span>
+    </button>
+  );
+}
+
+function Campo({ numero, titulo, ayuda, children, opcional }) {
+  return (
+    <div style={{ marginBottom: 26 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 3, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: MONO, fontSize: 11.5, color: T.tintaSuave }}>{numero}</span>
+        <h3 style={{ margin: 0, fontSize: 16.5, fontWeight: 680, letterSpacing: "-.01em" }}>{titulo}</h3>
+        {opcional && <span style={{ fontSize: 12, color: T.tintaSuave }}>opcional</span>}
+      </div>
+      {ayuda && <p style={{ margin: "0 0 10px 25px", fontSize: 13.5, color: T.tintaSuave, lineHeight: 1.45 }}>{ayuda}</p>}
+      <div style={{ marginLeft: 25, display: "flex", flexWrap: "wrap", gap: 8 }}>{children}</div>
+    </div>
+  );
+}
+
+function Sello({ valor }) {
+  const tono = valor >= 70 ? T.verde : valor >= 45 ? T.ambar : T.tintaSuave;
+  return (
+    <div style={{
+      width: 62, height: 62, borderRadius: "50%", border: `2.5px solid ${tono}`, color: tono,
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      transform: "rotate(-9deg)", flexShrink: 0, fontFamily: MONO, lineHeight: 1,
+    }}>
+      <span style={{ fontSize: 19, fontWeight: 700 }}>{valor}%</span>
+      <span style={{ fontSize: 7.5, letterSpacing: ".14em", marginTop: 3 }}>PARECIDO</span>
+    </div>
+  );
+}
+
+function Ficha({ r, resultado, nombres, onReencontrar }) {
+  const reencontrado = r.estado === "reencontrado";
+  const senas = r.senas || [];
+  return (
+    <article style={{
+      background: T.blanco, border: `1px solid ${T.linea}`,
+      borderLeft: `4px solid ${reencontrado ? T.verde : T.ambar}`,
+      borderRadius: 12, overflow: "hidden", opacity: reencontrado ? 0.72 : 1,
+    }}>
+      <div style={{ display: "flex" }}>
+        <div style={{ width: 116, flexShrink: 0, borderRight: `1px solid ${T.linea}` }}>
+          {r.foto_thumb_url ? (
+            <img src={r.foto_thumb_url} alt="" loading="lazy"
+              style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", display: "block" }} />
+          ) : (
+            <div style={{
+              width: "100%", aspectRatio: "1/1", background: T.papelHondo, display: "flex",
+              alignItems: "center", justifyContent: "center", color: "#B9B2A6",
+              fontSize: 11, fontFamily: MONO,
+            }}>SIN FOTO</div>
+          )}
+        </div>
+
+        <div style={{ flex: 1, padding: "12px 14px", minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: MONO, fontSize: 11, color: T.tintaSuave }}>
+                {r.codigo}
+                {!r.verificado && (
+                  <span style={{ marginLeft: 8, color: T.ambar }}>SIN VERIFICAR</span>
+                )}
+              </div>
+              <h4 style={{ margin: "2px 0 0", fontSize: 17, fontWeight: 700, letterSpacing: "-.015em" }}>
+                {r.especie} {r.tamano?.toLowerCase()}, {r.color?.toLowerCase()}
+              </h4>
+              <div style={{ fontSize: 13.5, color: T.tintaSuave, marginTop: 3 }}>
+                {r.sexo !== "No sé" ? r.sexo : "Sexo sin confirmar"} · {r.edad} · pelo {r.pelo?.toLowerCase()}
+                {r.collar_color ? ` · collar ${r.collar_color.toLowerCase()}` : ""}
+              </div>
+            </div>
+            {resultado && <Sello valor={resultado.valor} />}
+          </div>
+
+          <div style={{ marginTop: 9, fontSize: 13.5, lineHeight: 1.5 }}>
+            <strong style={{ fontWeight: 620 }}>Está en:</strong> {r.custodio}
+            {r.lugar ? ` — ${r.lugar}` : ""} · {r.barrio}, {r.municipio}
+            <br />
+            <strong style={{ fontWeight: 620 }}>Recogido el:</strong> {r.fecha_hallazgo}
+          </div>
+
+          {senas.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 9 }}>
+              {senas.map((s) => (
+                <span key={s} style={{
+                  fontSize: 12, padding: "3px 8px", borderRadius: 20,
+                  background: T.ambarClaro, color: "#8A5A12", fontWeight: 560,
+                }}>{s}</span>
+              ))}
+            </div>
+          )}
+
+          {r.nota && (
+            <p style={{ margin: "9px 0 0", fontSize: 13.5, fontStyle: "italic", lineHeight: 1.5 }}>
+              “{r.nota}”
+            </p>
+          )}
+
+          {resultado?.corroborados?.length > 0 && (
+            <div style={{ marginTop: 11, padding: "9px 11px", background: T.verdeClaro, borderRadius: 9 }}>
+              <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: ".1em", color: T.verde, marginBottom: 5 }}>
+                LO QUE TÚ DIJISTE Y AQUÍ APARECE
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {resultado.corroborados.map((c) => (
+                  <span key={c} style={{
+                    fontSize: 12.5, padding: "3px 9px", borderRadius: 20,
+                    background: T.blanco, color: T.verde, fontWeight: 620,
+                  }}>{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {resultado?.sinConfirmar?.length > 0 && (
+            <p style={{ margin: "8px 0 0", fontSize: 12.5, color: T.tintaSuave, lineHeight: 1.45 }}>
+              Sin confirmar aquí: {resultado.sinConfirmar.join(", ")}. Puede que el voluntario no lo
+              haya notado — pregúntalo.
+            </p>
+          )}
+
+          {resultado?.difieren?.length > 0 && (
+            <p style={{ margin: "7px 0 0", fontSize: 12.5, color: T.tintaSuave }}>
+              No coincide en: {resultado.difieren.join(", ")}
+            </p>
+          )}
+
+          {nombres && !reencontrado && (
+            <div style={{
+              marginTop: 11, padding: "9px 11px", background: T.violetaClaro,
+              borderRadius: 9, fontSize: 13, lineHeight: 1.45, color: T.violeta,
+            }}>
+              <strong style={{ fontWeight: 660 }}>Para confirmar:</strong> pide que lo llamen{" "}
+              <strong>{nombres}</strong> y te cuenten si reacciona.
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12, alignItems: "center" }}>
+            {reencontrado ? (
+              <span style={{
+                fontFamily: MONO, fontSize: 11.5, letterSpacing: ".1em", color: T.verde,
+                border: `1.5px solid ${T.verde}`, padding: "5px 10px", borderRadius: 6,
+              }}>REENCONTRADO</span>
+            ) : (
+              <>
+                <a
+                  href={`https://wa.me/57${(r.contacto_telefono || "").replace(/\D/g, "")}`}
+                  target="_blank" rel="noreferrer"
+                  style={{
+                    background: T.verde, color: T.blanco, textDecoration: "none",
+                    padding: "9px 14px", borderRadius: 8, fontSize: 14, fontWeight: 640,
+                  }}
+                >
+                  Escribir a {r.contacto_nombre}
+                </a>
+                <button
+                  type="button" onClick={() => onReencontrar(r)}
+                  style={{
+                    background: "transparent", border: `1.5px solid ${T.linea}`,
+                    color: T.tintaSuave, padding: "9px 13px", borderRadius: 8,
+                    fontSize: 13.5, fontWeight: 560, cursor: "pointer",
+                  }}
+                >
+                  Marcar como reencontrado
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function CargarFoto({ archivo, onArchivo }) {
+  const ref = useRef(null);
+  const [vista, setVista] = useState(null);
+  const [error, setError] = useState("");
+
+  const elegir = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setError("");
+    try {
+      const { vistaPrevia } = await comprimir(f);
+      setVista(vistaPrevia);
+      onArchivo(f);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {vista && (
+          <img src={vista} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 9, border: `1px solid ${T.linea}` }} />
+        )}
+        <button
+          type="button" onClick={() => ref.current?.click()}
+          style={{
+            padding: "12px 16px", borderRadius: 9, border: `1.5px dashed ${T.linea}`,
+            background: T.blanco, fontSize: 14.5, fontWeight: 560, cursor: "pointer",
+          }}
+        >
+          {archivo ? "Cambiar foto" : "Tomar o subir foto"}
+        </button>
+        <input ref={ref} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={elegir} />
+      </div>
+      {error && <p style={{ margin: "8px 0 0", fontSize: 13, color: T.rojo }}>{error}</p>}
+    </div>
+  );
+}
+
+function NotaLibre({ valor, onCambio, numero, titulo, ayuda, placeholder }) {
+  const detectados = extraerConceptos(valor);
+  return (
+    <div style={{ marginBottom: 26 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 3, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: MONO, fontSize: 11.5, color: T.tintaSuave }}>{numero}</span>
+        <h3 style={{ margin: 0, fontSize: 16.5, fontWeight: 680, letterSpacing: "-.01em" }}>{titulo}</h3>
+        <span style={{ fontSize: 12, color: T.tintaSuave }}>opcional</span>
+      </div>
+      <p style={{ margin: "0 0 10px 25px", fontSize: 13.5, color: T.tintaSuave, lineHeight: 1.45 }}>{ayuda}</p>
+      <div style={{ marginLeft: 25 }}>
+        <textarea
+          rows={3} maxLength={180} value={valor || ""}
+          onChange={(e) => onCambio(e.target.value)} placeholder={placeholder}
+          style={{ ...entradaTexto, resize: "vertical", lineHeight: 1.5 }}
+        />
+        <div style={{ fontSize: 12, color: T.tintaSuave, marginTop: 4, fontFamily: MONO }}>
+          {(valor || "").length}/180
+        </div>
+        {detectados.length > 0 && (
+          <div style={{ marginTop: 10, padding: "10px 12px", background: T.ambarClaro, borderRadius: 9, maxWidth: 420 }}>
+            <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: ".1em", color: "#8A5A12", marginBottom: 6 }}>
+              ENTENDÍ ESTO
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              {detectados.map((c) => (
+                <span key={c} style={{
+                  fontSize: 12.5, padding: "3px 9px", borderRadius: 20,
+                  background: T.blanco, color: "#8A5A12", fontWeight: 620,
+                }}>{etiquetaDe(c)}</span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Rasgos({ v, set }) {
+  const alterna = (s) => {
+    const actual = v.senas || [];
+    set("senas", actual.includes(s) ? actual.filter((x) => x !== s) : [...actual, s]);
+  };
+  return (
+    <>
+      <Campo numero="01" titulo="¿Qué animal es?">
+        {ESPECIE.map((o) => <Opcion key={o} activo={v.especie === o} onClick={() => set("especie", o)}>{o}</Opcion>)}
+      </Campo>
+      <Campo numero="02" titulo="Tamaño">
+        {TAMANO.map((o) => (
+          <Opcion key={o} activo={v.tamano === o} onClick={() => set("tamano", o)}>
+            {o} <span style={{ color: T.tintaSuave, fontWeight: 450, fontSize: 12.5 }}>({TAMANO_PISTA[o]})</span>
+          </Opcion>
+        ))}
+      </Campo>
+      <Campo numero="03" titulo="Color que más se ve" ayuda="Si tiene varios, elige el que cubre más cuerpo.">
+        {COLOR.map((o) => <Opcion key={o} activo={v.color === o} onClick={() => set("color", o)} muestra={COLOR_MUESTRA[o]}>{o}</Opcion>)}
+      </Campo>
+      <Campo numero="04" titulo="Pelo">
+        {PELO.map((o) => <Opcion key={o} activo={v.pelo === o} onClick={() => set("pelo", o)}>{o}</Opcion>)}
+      </Campo>
+      <Campo numero="05" titulo="Sexo">
+        {SEXO.map((o) => <Opcion key={o} activo={v.sexo === o} onClick={() => set("sexo", o)}>{o}</Opcion>)}
+      </Campo>
+      <Campo numero="06" titulo="Edad aproximada">
+        {EDAD.map((o) => <Opcion key={o} activo={v.edad === o} onClick={() => set("edad", o)}>{o}</Opcion>)}
+      </Campo>
+      <Campo numero="07" titulo="Orejas">
+        {OREJAS.map((o) => <Opcion key={o} activo={v.orejas === o} onClick={() => set("orejas", o)}>{o}</Opcion>)}
+      </Campo>
+      <Campo numero="08" titulo="Cola">
+        {COLA.map((o) => <Opcion key={o} activo={v.cola === o} onClick={() => set("cola", o)}>{o}</Opcion>)}
+      </Campo>
+      <Campo numero="09" titulo="Señas particulares" ayuda="Marca todas las que apliquen." opcional>
+        {SENAS.map((o) => <Opcion key={o} activo={(v.senas || []).includes(o)} onClick={() => alterna(o)}>{o}</Opcion>)}
+      </Campo>
+      {(v.senas || []).includes("Llevaba collar") && (
+        <Campo numero="09b" titulo="Color del collar" opcional>
+          {COLOR_COLLAR.map((o) => <Opcion key={o} activo={v.collar_color === o} onClick={() => set("collar_color", o)}>{o}</Opcion>)}
+        </Campo>
+      )}
+    </>
+  );
+}
+
+function Zona({ v, set, numero }) {
+  return (
+    <>
+      <Campo numero={numero} titulo="Departamento">
+        {Object.keys(MUNICIPIOS).map((o) => (
+          <Opcion key={o} activo={v.departamento === o}
+            onClick={() => { set("departamento", o); set("municipio", ""); }}>{o}</Opcion>
+        ))}
+      </Campo>
+      {v.departamento && (
+        <Campo numero={`${numero}b`} titulo="Municipio">
+          {MUNICIPIOS[v.departamento].map((o) => (
+            <Opcion key={o} activo={v.municipio === o} onClick={() => set("municipio", o)}>{o}</Opcion>
+          ))}
+        </Campo>
+      )}
+    </>
+  );
+}
+
+/* ------------------------------- APP ------------------------------- */
+
+export default function App() {
+  const [registros, setRegistros] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState("");
+  const [modo, setModo] = useState("inicio");
+
+  const [busqueda, setBusqueda] = useState({ senas: [] });
+  const [resultados, setResultados] = useState(null);
+
+  const [reporte, setReporte] = useState({ senas: [], fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+  const [archivoFoto, setArchivoFoto] = useState(null);
+  const [guardando, setGuardando] = useState(false);
+  const [errorGuardar, setErrorGuardar] = useState("");
+  const [guardado, setGuardado] = useState(null);
+
+  const [filtroEspecie, setFiltroEspecie] = useState("");
+  const [filtroMuni, setFiltroMuni] = useState("");
+
+  const setB = (k, v) => setBusqueda((p) => ({ ...p, [k]: v }));
+  const setR = (k, v) => setReporte((p) => ({ ...p, [k]: v }));
+
+  async function cargar() {
+    setCargando(true);
+    const { data, error } = await supabase
+      .from("mascotas")
+      .select("*")
+      .neq("estado", "oculto")
+      .order("creado_en", { ascending: false })
+      .limit(1000);
+
+    if (error) setErrorCarga("No se pudo cargar el listado. Revisa tu conexión y vuelve a intentar.");
+    else { setRegistros(data || []); setErrorCarga(""); }
+    setCargando(false);
+  }
+
+  useEffect(() => { cargar(); }, []);
+
+  const enResguardo = registros.filter((r) => r.estado === "resguardo").length;
+  const reencontrados = registros.filter((r) => r.estado === "reencontrado").length;
+
+  async function marcarReencontrado(r) {
+    if (!confirm(`¿Confirmas que ${r.codigo} ya volvió con su familia?`)) return;
+    const { error } = await supabase.from("mascotas").update({ estado: "reencontrado" }).eq("id", r.id);
+    if (error) {
+      alert("Solo un voluntario con sesión activa puede marcar reencuentros. Escríbele al grupo.");
+      return;
+    }
+    setRegistros((p) => p.map((x) => (x.id === r.id ? { ...x, estado: "reencontrado" } : x)));
+  }
+
+  function buscar() {
+    const activas = registros.filter((r) => r.estado === "resguardo");
+    setResultados(buscarCoincidencias(busqueda, activas));
+    if (busqueda.especie) {
+      supabase.from("busquedas").insert([{ ...busqueda, estado: "abierta" }]).then(() => {});
+    }
+  }
+
+  async function guardarReporte() {
+    const obligatorios = ["especie", "tamano", "color", "departamento", "municipio", "contacto_nombre", "contacto_telefono"];
+    const faltan = obligatorios.filter((k) => !reporte[k]);
+    if (faltan.length) {
+      setErrorGuardar("Faltan datos obligatorios. Revisa especie, tamaño, color, ubicación y contacto.");
+      return;
+    }
+
+    setGuardando(true);
+    setErrorGuardar("");
+
+    try {
+      const { data, error } = await supabase
+        .from("mascotas")
+        .insert([{ ...reporte, estado: "resguardo", verificado: false }])
+        .select()
+        .single();
+      if (error) throw new Error("No se pudo guardar la ficha. Revisa tu conexión.");
+
+      if (archivoFoto) {
+        try {
+          const urls = await subirFoto(archivoFoto, data.codigo);
+          await supabase.from("mascotas").update(urls).eq("id", data.id);
+          Object.assign(data, urls);
+        } catch {
+          // La ficha ya quedó guardada. La foto se puede agregar después.
+        }
+      }
+
+      setRegistros((p) => [data, ...p]);
+      setGuardado(data.codigo);
+      setReporte({ senas: [], fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+      setArchivoFoto(null);
+    } catch (e) {
+      setErrorGuardar(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const listaFiltrada = useMemo(
+    () => registros.filter((r) =>
+      (!filtroEspecie || r.especie === filtroEspecie) &&
+      (!filtroMuni || r.municipio === filtroMuni)),
+    [registros, filtroEspecie, filtroMuni]
+  );
+
+  const municipiosConRegistro = useMemo(
+    () => [...new Set(registros.map((r) => r.municipio))].sort(), [registros]
+  );
+
+  const btnModo = (id, etiqueta, sub) => (
+    <button
+      type="button"
+      onClick={() => { setModo(id); setResultados(null); setGuardado(null); setErrorGuardar(""); }}
+      style={{
+        flex: 1, minWidth: 200, textAlign: "left", cursor: "pointer", padding: "18px 20px",
+        borderRadius: 13, border: `1.5px solid ${modo === id ? T.verde : T.linea}`,
+        background: modo === id ? T.verde : T.blanco, color: modo === id ? T.blanco : T.tinta,
+      }}
+    >
+      <div style={{ fontSize: 17, fontWeight: 690, letterSpacing: "-.015em" }}>{etiqueta}</div>
+      <div style={{ fontSize: 13.5, marginTop: 3, opacity: modo === id ? 0.85 : 0.6 }}>{sub}</div>
+    </button>
+  );
+
+  return (
+    <div style={{ background: T.papel, minHeight: "100vh", fontFamily: FUENTE, color: T.tinta }}>
+      <style>{`* { box-sizing: border-box; } body { margin: 0; }
+        button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid ${T.ambar}; outline-offset: 2px; }`}</style>
+
+      <header style={{ borderBottom: `1px solid ${T.linea}`, background: T.blanco }}>
+        <div style={{ maxWidth: 940, margin: "0 auto", padding: "20px 20px 18px" }}>
+          <div style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".18em", color: T.tintaSuave }}>
+            EJE CAFETERO · RISARALDA · QUINDÍO · CALDAS · VALLE
+          </div>
+          <h1 style={{ margin: "6px 0 0", fontSize: 31, fontWeight: 760, letterSpacing: "-.03em", lineHeight: 1.05 }}>
+            Huellas a Casa
+          </h1>
+          <p style={{ margin: "7px 0 0", fontSize: 15.5, color: T.tintaSuave, maxWidth: 560, lineHeight: 1.5 }}>
+            Un solo lugar para registrar y buscar las mascotas que quedaron sin su casa.
+          </p>
+          <div style={{ display: "flex", gap: 22, marginTop: 16, fontFamily: MONO, fontSize: 12.5 }}>
+            <div>
+              <div style={{ fontSize: 25, fontWeight: 700, color: T.ambar, lineHeight: 1 }}>{enResguardo}</div>
+              <div style={{ color: T.tintaSuave, marginTop: 4 }}>EN RESGUARDO</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 25, fontWeight: 700, color: T.verde, lineHeight: 1 }}>{reencontrados}</div>
+              <div style={{ color: T.tintaSuave, marginTop: 4 }}>REENCONTRADOS</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main style={{ maxWidth: 940, margin: "0 auto", padding: "22px 20px 70px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 26 }}>
+          {btnModo("buscar", "Busco a mi mascota", "Responde y te muestro los parecidos")}
+          {btnModo("reportar", "Encontré una mascota", "Para refugios, hogares y voluntarios")}
+          {btnModo("lista", "Ver todos los registros", cargando ? "Cargando…" : `${registros.length} fichas`)}
+        </div>
+
+        {errorCarga && (
+          <div style={{
+            border: `1.5px solid ${T.rojo}`, borderRadius: 11, padding: "14px 16px",
+            marginBottom: 20, fontSize: 14.5, color: T.rojo,
+          }}>
+            {errorCarga}{" "}
+            <button type="button" onClick={cargar} style={{
+              background: "transparent", border: "none", color: T.rojo,
+              textDecoration: "underline", cursor: "pointer", fontSize: 14.5, padding: 0,
+            }}>Reintentar</button>
+          </div>
+        )}
+
+        {modo === "inicio" && (
+          <div style={{
+            border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco,
+            padding: "26px 24px", fontSize: 15.5, lineHeight: 1.6, color: T.tintaSuave,
+          }}>
+            <p style={{ margin: 0 }}>
+              Elige arriba qué necesitas hacer. Casi todo se responde tocando opciones. Solo hay un
+              espacio para escribir libre, al final, y ahí puedes contar con tus palabras lo que no
+              cabe en las casillas.
+            </p>
+          </div>
+        )}
+
+        {modo === "buscar" && !resultados && (
+          <section>
+            <div style={{
+              background: T.ambarClaro, border: "1px solid #EBD9B4", borderRadius: 11,
+              padding: "14px 16px", marginBottom: 24, fontSize: 14.5, lineHeight: 1.5,
+            }}>
+              Responde solo lo que recuerdes con seguridad. Lo que dejes en blanco no te quita coincidencias.
+            </div>
+
+            <Rasgos v={busqueda} set={setB} />
+            <Zona v={busqueda} set={setB} numero="10" />
+
+            <NotaLibre
+              numero="11" titulo="Cuéntanos algo más de tu mascota"
+              ayuda="Con tus palabras. No importa cómo lo escribas: entiendo lo mismo si dices cojea, renquea o camina mal."
+              valor={busqueda.nota} onCambio={(v) => setB("nota", v)}
+              placeholder="Ej.: renquea de una pata de atrás, tiene una manchita blanca en el pecho"
+            />
+
+            <Campo numero="12" titulo="¿A qué nombre responde?"
+              ayuda="No se usa para buscar. Sirve para que el refugio lo llame y confirme." opcional>
+              <input style={entradaTexto} value={busqueda.nombres || ""}
+                onChange={(e) => setB("nombres", e.target.value)} placeholder="Ej.: Luna, Lunita" />
+            </Campo>
+
+            <Campo numero="13" titulo="Tu WhatsApp"
+              ayuda="Solo lo ven los voluntarios. Si llega una mascota parecida, te avisan sin que tengas que volver a entrar." opcional>
+              <input style={entradaTexto} inputMode="tel" value={busqueda.contacto_telefono || ""}
+                onChange={(e) => setB("contacto_telefono", e.target.value)} placeholder="10 dígitos" />
+            </Campo>
+
+            <button type="button" onClick={buscar} style={{
+              background: T.verde, color: T.blanco, border: "none", borderRadius: 10,
+              padding: "16px 26px", fontSize: 17, fontWeight: 680, cursor: "pointer",
+              marginLeft: 25, marginTop: 6,
+            }}>Buscar coincidencias</button>
+          </section>
+        )}
+
+        {modo === "buscar" && resultados && (
+          <section>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontSize: 21, fontWeight: 720, letterSpacing: "-.02em" }}>
+                {resultados.length === 0 ? "Todavía no hay nada parecido" : `${resultados.length} para revisar`}
+              </h2>
+              <button type="button" onClick={() => setResultados(null)} style={{
+                background: "transparent", border: `1.5px solid ${T.linea}`, borderRadius: 8,
+                padding: "9px 14px", fontSize: 14, cursor: "pointer", fontWeight: 560,
+              }}>Cambiar respuestas</button>
+            </div>
+
+            {resultados.length === 0 ? (
+              <div style={{
+                border: `1px solid ${T.linea}`, borderRadius: 12, background: T.blanco,
+                padding: "24px 22px", fontSize: 15, lineHeight: 1.6, color: T.tintaSuave,
+              }}>
+                Ningún registro coincide lo suficiente por ahora. Guardamos tu búsqueda: si dejaste
+                WhatsApp, los voluntarios te avisan cuando llegue algo parecido.
+              </div>
+            ) : (
+              <>
+                <p style={{ margin: "0 0 16px", fontSize: 14, color: T.tintaSuave, lineHeight: 1.5 }}>
+                  Ordenadas por parecido. El porcentaje viene de los datos, no de la foto: mira siempre
+                  la imagen antes de escribir.
+                </p>
+                <div style={{ display: "grid", gap: 14 }}>
+                  {resultados.map(({ ficha, resultado }) => (
+                    <Ficha key={ficha.id} r={ficha} resultado={resultado}
+                      nombres={busqueda.nombres} onReencontrar={marcarReencontrado} />
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {modo === "reportar" && guardado && (
+          <section style={{ border: `1.5px solid ${T.verde}`, background: T.verdeClaro, borderRadius: 13, padding: "26px 24px" }}>
+            <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: ".12em", color: T.verde }}>FICHA CREADA</div>
+            <h2 style={{ margin: "8px 0 6px", fontSize: 26, fontWeight: 740, letterSpacing: "-.02em" }}>{guardado}</h2>
+            <p style={{ margin: "0 0 18px", fontSize: 15, color: T.tintaSuave, lineHeight: 1.55 }}>
+              Anota este código en la jaula o el guacal. Es el que se usa para confirmar la entrega.
+            </p>
+            <button type="button" onClick={() => setGuardado(null)} style={{
+              background: T.verde, color: T.blanco, border: "none", borderRadius: 9,
+              padding: "13px 20px", fontSize: 15.5, fontWeight: 660, cursor: "pointer",
+            }}>Registrar la siguiente mascota</button>
+          </section>
+        )}
+
+        {modo === "reportar" && !guardado && (
+          <section>
+            <div style={{
+              background: T.verdeClaro, border: "1px solid #CBE0D6", borderRadius: 11,
+              padding: "14px 16px", marginBottom: 24, fontSize: 14.5, lineHeight: 1.5,
+            }}>
+              Una ficha por animal. La foto es para que el tutor reconozca: tómala con luz y de cuerpo entero.
+            </div>
+
+            <Campo numero="00" titulo="Foto de la mascota">
+              <CargarFoto archivo={archivoFoto} onArchivo={setArchivoFoto} />
+            </Campo>
+
+            <Rasgos v={reporte} set={setR} />
+            <Zona v={reporte} set={setR} numero="10" />
+
+            <Campo numero="11" titulo="Barrio o vereda donde apareció">
+              <input style={entradaTexto} value={reporte.barrio || ""}
+                onChange={(e) => setR("barrio", e.target.value)} placeholder="Ej.: Cuba" />
+            </Campo>
+
+            <Campo numero="12" titulo="Fecha en que lo recogieron">
+              <input type="date" style={{ ...entradaTexto, maxWidth: 210 }}
+                value={reporte.fecha_hallazgo || ""} onChange={(e) => setR("fecha_hallazgo", e.target.value)} />
+            </Campo>
+
+            <Campo numero="13" titulo="¿Dónde está ahora?">
+              {CUSTODIO.map((o) => <Opcion key={o} activo={reporte.custodio === o} onClick={() => setR("custodio", o)}>{o}</Opcion>)}
+            </Campo>
+
+            <Campo numero="14" titulo="Nombre del refugio o del sitio" opcional>
+              <input style={entradaTexto} value={reporte.lugar || ""}
+                onChange={(e) => setR("lugar", e.target.value)} placeholder="Ej.: Albergue Huellas de Esperanza" />
+            </Campo>
+
+            <Campo numero="15" titulo="Quién responde y por dónde">
+              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                <input style={entradaTexto} value={reporte.contacto_nombre || ""}
+                  onChange={(e) => setR("contacto_nombre", e.target.value)} placeholder="Nombre de quien atiende" />
+                <input style={entradaTexto} inputMode="tel" value={reporte.contacto_telefono || ""}
+                  onChange={(e) => setR("contacto_telefono", e.target.value)} placeholder="WhatsApp, 10 dígitos" />
+              </div>
+            </Campo>
+
+            <NotaLibre
+              numero="16" titulo="Qué observaste del animal"
+              ayuda="Escríbelo como te salga. Sirve para cruzar con lo que cuente el tutor."
+              valor={reporte.nota} onCambio={(v) => setR("nota", v)}
+              placeholder="Ej.: muy asustadito, se esconde. Tiene el hocico canoso."
+            />
+
+            {errorGuardar && (
+              <p style={{ margin: "0 0 12px 25px", fontSize: 14, color: T.rojo }}>{errorGuardar}</p>
+            )}
+
+            <button type="button" onClick={guardarReporte} disabled={guardando} style={{
+              background: guardando ? T.tintaSuave : T.verde, color: T.blanco, border: "none",
+              borderRadius: 10, padding: "16px 26px", fontSize: 17, fontWeight: 680,
+              cursor: guardando ? "wait" : "pointer", marginLeft: 25, marginTop: 6,
+            }}>{guardando ? "Guardando…" : "Guardar ficha"}</button>
+          </section>
+        )}
+
+        {modo === "lista" && (
+          <section>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18, alignItems: "center" }}>
+              <span style={{ fontFamily: MONO, fontSize: 11.5, color: T.tintaSuave, marginRight: 4 }}>FILTRAR</span>
+              <Opcion activo={!filtroEspecie} onClick={() => setFiltroEspecie("")}>Todas</Opcion>
+              {ESPECIE.map((o) => <Opcion key={o} activo={filtroEspecie === o} onClick={() => setFiltroEspecie(o)}>{o}</Opcion>)}
+              <select value={filtroMuni} onChange={(e) => setFiltroMuni(e.target.value)}
+                style={{ ...entradaTexto, maxWidth: 210, padding: "10px 12px", minHeight: 44 }}>
+                <option value="">Todos los municipios</option>
+                {municipiosConRegistro.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: "grid", gap: 14 }}>
+              {cargando && <p style={{ color: T.tintaSuave, fontSize: 15 }}>Cargando fichas…</p>}
+              {!cargando && listaFiltrada.map((r) => (
+                <Ficha key={r.id} r={r} resultado={null} nombres={null} onReencontrar={marcarReencontrado} />
+              ))}
+              {!cargando && listaFiltrada.length === 0 && (
+                <div style={{
+                  border: `1px solid ${T.linea}`, borderRadius: 12, background: T.blanco,
+                  padding: "24px 22px", color: T.tintaSuave, fontSize: 15,
+                }}>
+                  No hay fichas con esos filtros. Quita alguno para ver más.
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
