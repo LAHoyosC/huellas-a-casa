@@ -5,3 +5,4 @@ dist
 .DS_Store
 CONTEXTO.md
 supabase/.temp
+.wrangler

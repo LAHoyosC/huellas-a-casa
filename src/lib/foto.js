@@ -9,9 +9,14 @@
 // Guardamos dos versiones: una miniatura para el listado (que es lo
 // que todo el mundo mira) y la grande para la ficha (que abren pocos).
 // Eso baja muchisimo el trafico.
+//
+// Las fotos viven en Cloudflare R2, no en Supabase: 10 GB gratis y la
+// salida de datos no se cobra, asi que verlas no gasta cuota. Las sube
+// y las sirve worker/index.js, en el mismo dominio de la pagina.
+// En staging van bajo la carpeta "staging/" para no mezclarlas.
 // ============================================================
 
-import { supabase } from "./supabase.js";
+const ENTORNO = import.meta.env.VITE_ENTORNO === "staging" ? "staging" : "prod";
 
 const GRANDE = { ancho: 1200, calidad: 0.8 };
 const MINIATURA = { ancho: 320, calidad: 0.7 };
@@ -67,28 +72,20 @@ export async function subirFoto(archivo, codigo) {
   const { grande, miniatura } = await comprimir(archivo);
   const sello = Date.now();
 
-  const rutaGrande = `${codigo}/${sello}-grande.jpg`;
-  const rutaMini = `${codigo}/${sello}-mini.jpg`;
+  const rutaGrande = `${ENTORNO}/${codigo}/${sello}-grande.jpg`;
+  const rutaMini = `${ENTORNO}/${codigo}/${sello}-mini.jpg`;
 
-  const subidas = await Promise.all([
-    supabase.storage.from("fotos").upload(rutaGrande, grande, {
-      contentType: "image/jpeg",
-      cacheControl: "31536000",
-    }),
-    supabase.storage.from("fotos").upload(rutaMini, miniatura, {
-      contentType: "image/jpeg",
-      cacheControl: "31536000",
-    }),
-  ]);
+  const [g, m] = await Promise.all([subir(rutaGrande, grande), subir(rutaMini, miniatura)]);
+  return { foto_url: g, foto_thumb_url: m };
+}
 
-  const fallo = subidas.find((s) => s.error);
-  if (fallo) throw new Error("No se pudo subir la foto. Revisa la conexión.");
-
-  const { data: pubGrande } = supabase.storage.from("fotos").getPublicUrl(rutaGrande);
-  const { data: pubMini } = supabase.storage.from("fotos").getPublicUrl(rutaMini);
-
-  return {
-    foto_url: pubGrande.publicUrl,
-    foto_thumb_url: pubMini.publicUrl,
-  };
+async function subir(ruta, blob) {
+  const r = await fetch(`/api/fotos/${ruta}`, {
+    method: "PUT",
+    headers: { "content-type": "image/jpeg" },
+    body: blob,
+  });
+  if (!r.ok) throw new Error("No se pudo subir la foto. Revisa la conexión.");
+  const { url } = await r.json();
+  return url;
 }
