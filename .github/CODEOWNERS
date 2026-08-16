@@ -1,0 +1,3 @@
+# Solo estas personas pueden aprobar cambios. La proteccion de main
+# exige la aprobacion de un code owner para mergear.
+*  @LAHoyosC
