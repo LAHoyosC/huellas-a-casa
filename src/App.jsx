@@ -400,46 +400,47 @@ function NotaLibre({ valor, onCambio, numero, titulo, ayuda, placeholder }) {
   );
 }
 
-function Rasgos({ v, set }) {
+function Rasgos({ v, set, desde = 1 }) {
+  const n = (i) => String(desde + i).padStart(2, "0");
   const alterna = (s) => {
     const actual = v.senas || [];
     set("senas", actual.includes(s) ? actual.filter((x) => x !== s) : [...actual, s]);
   };
   return (
     <>
-      <Campo numero="01" titulo="¿Qué animal es?">
+      <Campo numero={n(0)} titulo="¿Qué animal es?">
         {ESPECIE.map((o) => <Opcion key={o} activo={v.especie === o} onClick={() => set("especie", o)}>{o}</Opcion>)}
       </Campo>
-      <Campo numero="02" titulo="Tamaño">
+      <Campo numero={n(1)} titulo="Tamaño">
         {TAMANO.map((o) => (
           <Opcion key={o} activo={v.tamano === o} onClick={() => set("tamano", o)}>
             {o} <span style={{ color: T.tintaSuave, fontWeight: 450, fontSize: 12.5 }}>({TAMANO_PISTA[o]})</span>
           </Opcion>
         ))}
       </Campo>
-      <Campo numero="03" titulo="Color que más se ve" ayuda="Si tiene varios, elige el que cubre más cuerpo.">
+      <Campo numero={n(2)} titulo="Color que más se ve" ayuda="Si tiene varios, elige el que cubre más cuerpo.">
         {COLOR.map((o) => <Opcion key={o} activo={v.color === o} onClick={() => set("color", o)} muestra={COLOR_MUESTRA[o]}>{o}</Opcion>)}
       </Campo>
-      <Campo numero="04" titulo="Pelo">
+      <Campo numero={n(3)} titulo="Pelo">
         {PELO.map((o) => <Opcion key={o} activo={v.pelo === o} onClick={() => set("pelo", o)}>{o}</Opcion>)}
       </Campo>
-      <Campo numero="05" titulo="Sexo">
+      <Campo numero={n(4)} titulo="Sexo">
         {SEXO.map((o) => <Opcion key={o} activo={v.sexo === o} onClick={() => set("sexo", o)}>{o}</Opcion>)}
       </Campo>
-      <Campo numero="06" titulo="Edad aproximada">
+      <Campo numero={n(5)} titulo="Edad aproximada">
         {EDAD.map((o) => <Opcion key={o} activo={v.edad === o} onClick={() => set("edad", o)}>{o}</Opcion>)}
       </Campo>
-      <Campo numero="07" titulo="Orejas">
+      <Campo numero={n(6)} titulo="Orejas">
         {OREJAS.map((o) => <Opcion key={o} activo={v.orejas === o} onClick={() => set("orejas", o)}>{o}</Opcion>)}
       </Campo>
-      <Campo numero="08" titulo="Cola">
+      <Campo numero={n(7)} titulo="Cola">
         {COLA.map((o) => <Opcion key={o} activo={v.cola === o} onClick={() => set("cola", o)}>{o}</Opcion>)}
       </Campo>
-      <Campo numero="09" titulo="Señas particulares" ayuda="Marca todas las que apliquen." opcional>
+      <Campo numero={n(8)} titulo="Señas particulares" ayuda="Marca todas las que apliquen." opcional>
         {SENAS.map((o) => <Opcion key={o} activo={(v.senas || []).includes(o)} onClick={() => alterna(o)}>{o}</Opcion>)}
       </Campo>
       {(v.senas || []).includes("Llevaba collar") && (
-        <Campo numero="09b" titulo="Color del collar" opcional>
+        <Campo numero={`${n(8)}b`} titulo="Color del collar" opcional>
           {COLOR_COLLAR.map((o) => <Opcion key={o} activo={v.collar_color === o} onClick={() => set("collar_color", o)}>{o}</Opcion>)}
         </Campo>
       )}
@@ -690,8 +691,8 @@ export default function App() {
               Responde solo lo que recuerdes con seguridad. Lo que dejes en blanco no te quita coincidencias.
             </div>
 
-            <Rasgos v={busqueda} set={setB} />
-            <Zona v={busqueda} set={setB} numero="10" />
+            <Zona v={busqueda} set={setB} numero="01" />
+            <Rasgos v={busqueda} set={setB} desde={2} />
 
             <NotaLibre
               numero="11" titulo="Cuéntanos algo más de tu mascota"
@@ -798,13 +799,14 @@ export default function App() {
               <CargarFoto archivo={archivoFoto} onArchivo={setArchivoFoto} />
             </Campo>
 
-            <Rasgos v={reporte} set={setR} />
-            <Zona v={reporte} set={setR} numero="10" />
+            <Zona v={reporte} set={setR} numero="01" />
 
-            <Campo numero="11" titulo="Barrio o vereda donde apareció">
+            <Campo numero="02" titulo="Barrio o vereda donde apareció">
               <input style={entradaTexto} value={reporte.barrio || ""}
                 onChange={(e) => setR("barrio", e.target.value)} placeholder="Ej.: Cuba" />
             </Campo>
+
+            <Rasgos v={reporte} set={setR} desde={3} />
 
             <Campo numero="12" titulo="Fecha en que lo recogieron">
               <input type="date" style={{ ...entradaTexto, maxWidth: 210 }}
