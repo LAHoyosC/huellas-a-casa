@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { supabase } from "./lib/supabase.js";
+import { supabase, configurado } from "./lib/supabase.js";
 import { subirFoto, comprimir } from "./lib/foto.js";
-import { buscarCoincidencias } from "./lib/coincidencia.js";
+import { buscarCoincidencias, posiblesDuplicados, fichasGemelas, empatadosArriba } from "./lib/coincidencia.js";
 import { extraerConceptos, etiquetaDe } from "./lib/conceptos.js";
 import {
   ESPECIE, TAMANO, TAMANO_PISTA, COLOR, COLOR_MUESTRA, PELO, SEXO, EDAD,
@@ -379,6 +379,7 @@ export default function App() {
   const [guardando, setGuardando] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState("");
   const [guardado, setGuardado] = useState(null);
+  const [duplicados, setDuplicados] = useState(null);
 
   const [filtroEspecie, setFiltroEspecie] = useState("");
   const [filtroMuni, setFiltroMuni] = useState("");
@@ -395,7 +396,8 @@ export default function App() {
       .order("creado_en", { ascending: false })
       .limit(1000);
 
-    if (error) setErrorCarga("No se pudo cargar el listado. Revisa tu conexión y vuelve a intentar.");
+    if (!configurado) setErrorCarga("La página no tiene configurada la conexión a la base de datos. Avisa a quien administra el sitio.");
+    else if (error) setErrorCarga("No se pudo cargar el listado. Revisa tu conexión y vuelve a intentar.");
     else { setRegistros(data || []); setErrorCarga(""); }
     setCargando(false);
   }
@@ -406,7 +408,19 @@ export default function App() {
   const reencontrados = registros.filter((r) => r.estado === "reencontrado").length;
 
   async function marcarReencontrado(r) {
-    if (!confirm(`¿Confirmas que ${r.codigo} ya volvió con su familia?`)) return;
+    // Antes de dar de alta, avisar si hay otros animales en resguardo que
+    // se parecen mucho: el riesgo es entregar el equivocado.
+    const gemelas = fichasGemelas(r, registros);
+    let mensaje = `¿Confirmas que ${r.codigo} ya volvió con su familia?`;
+    if (gemelas.length) {
+      const codigos = gemelas.slice(0, 4).map((g) => `${g.ficha.codigo} (${g.resultado.valor}%)`).join(", ");
+      const s = gemelas.length > 1 ? "s" : "";
+      mensaje =
+        `OJO: hay ${gemelas.length} ficha${s} en resguardo muy parecida${s} a esta: ${codigos}.\n\n` +
+        `Verifica el código en la jaula o guacal antes de seguir.\n\n` +
+        `¿Seguro que el que se entregó es ${r.codigo}?`;
+    }
+    if (!confirm(mensaje)) return;
     const { error } = await supabase.from("mascotas").update({ estado: "reencontrado" }).eq("id", r.id);
     if (error) {
       alert("Solo un voluntario con sesión activa puede marcar reencuentros. Escríbele al grupo.");
@@ -423,13 +437,24 @@ export default function App() {
     }
   }
 
-  async function guardarReporte() {
+  async function guardarReporte(ignorarDuplicados = false) {
     const obligatorios = ["especie", "tamano", "color", "departamento", "municipio", "contacto_nombre", "contacto_telefono"];
     const faltan = obligatorios.filter((k) => !reporte[k]);
     if (faltan.length) {
       setErrorGuardar("Faltan datos obligatorios. Revisa especie, tamaño, color, ubicación y contacto.");
       return;
     }
+
+    // Antes de guardar, buscar si el mismo animal ya esta registrado
+    // (mismo municipio, fechas cercanas, rasgos muy parecidos).
+    if (!ignorarDuplicados) {
+      const parecidas = posiblesDuplicados(reporte, registros);
+      if (parecidas.length) {
+        setDuplicados(parecidas);
+        return;
+      }
+    }
+    setDuplicados(null);
 
     setGuardando(true);
     setErrorGuardar("");
@@ -477,7 +502,7 @@ export default function App() {
   const btnModo = (id, etiqueta, sub) => (
     <button
       type="button"
-      onClick={() => { setModo(id); setResultados(null); setGuardado(null); setErrorGuardar(""); }}
+      onClick={() => { setModo(id); setResultados(null); setGuardado(null); setErrorGuardar(""); setDuplicados(null); }}
       style={{
         flex: 1, minWidth: 200, textAlign: "left", cursor: "pointer", padding: "18px 20px",
         borderRadius: 13, border: `1.5px solid ${modo === id ? T.verde : T.linea}`,
@@ -616,6 +641,16 @@ export default function App() {
                   Ordenadas por parecido. El porcentaje viene de los datos, no de la foto: mira siempre
                   la imagen antes de escribir.
                 </p>
+                {empatadosArriba(resultados).length > 1 && (
+                  <div style={{
+                    border: `1.5px solid ${T.ambar}`, background: T.ambarClaro, borderRadius: 11,
+                    padding: "12px 15px", marginBottom: 16, fontSize: 14.5, lineHeight: 1.5,
+                  }}>
+                    <strong style={{ fontWeight: 660 }}>Hay {empatadosArriba(resultados).length} fichas casi
+                    empatadas.</strong> Se parecen mucho entre sí. Compara las fotos con calma y, cuando
+                    escribas, menciona el código de la ficha para que no se confundan.
+                  </div>
+                )}
                 <div style={{ display: "grid", gap: 14 }}>
                   {resultados.map(({ ficha, resultado }) => (
                     <Ficha key={ficha.id} r={ficha} resultado={resultado}
@@ -692,11 +727,47 @@ export default function App() {
               placeholder="Ej.: muy asustadito, se esconde. Tiene el hocico canoso."
             />
 
+            {duplicados && (
+              <section style={{
+                border: `1.5px solid ${T.ambar}`, background: T.ambarClaro, borderRadius: 13,
+                padding: "20px 22px", margin: "0 0 18px 25px",
+              }}>
+                <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: ".12em", color: "#8A5A12" }}>
+                  ¿YA ESTÁ REGISTRADA?
+                </div>
+                <p style={{ margin: "8px 0 14px", fontSize: 15, lineHeight: 1.55 }}>
+                  {duplicados.length === 1 ? "Hay una ficha" : `Hay ${duplicados.length} fichas`} del mismo
+                  municipio, de fechas cercanas y muy parecida{duplicados.length > 1 ? "s" : ""} a la que vas a
+                  guardar. Mira la foto: si es el mismo animal, no la repitas.
+                </p>
+                <div style={{ display: "grid", gap: 12 }}>
+                  {duplicados.map(({ ficha, resultado }) => (
+                    <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={null} onReencontrar={marcarReencontrado} />
+                  ))}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
+                  <button type="button" onClick={() => {
+                    setDuplicados(null);
+                    setReporte({ senas: [], fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+                    setArchivoFoto(null);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }} style={{
+                    background: T.verde, color: T.blanco, border: "none", borderRadius: 9,
+                    padding: "12px 18px", fontSize: 15, fontWeight: 660, cursor: "pointer",
+                  }}>Es una de estas, no guardar</button>
+                  <button type="button" onClick={() => guardarReporte(true)} disabled={guardando} style={{
+                    background: "transparent", border: `1.5px solid ${T.linea}`, borderRadius: 9,
+                    padding: "12px 18px", fontSize: 15, fontWeight: 560, cursor: "pointer", color: T.tinta,
+                  }}>{guardando ? "Guardando…" : "No, es otro animal — guardar"}</button>
+                </div>
+              </section>
+            )}
+
             {errorGuardar && (
               <p style={{ margin: "0 0 12px 25px", fontSize: 14, color: T.rojo }}>{errorGuardar}</p>
             )}
 
-            <button type="button" onClick={guardarReporte} disabled={guardando} style={{
+            <button type="button" onClick={() => guardarReporte(false)} disabled={guardando} style={{
               background: guardando ? T.tintaSuave : T.verde, color: T.blanco, border: "none",
               borderRadius: 10, padding: "16px 26px", fontSize: 17, fontWeight: 680,
               cursor: guardando ? "wait" : "pointer", marginLeft: 25, marginTop: 6,

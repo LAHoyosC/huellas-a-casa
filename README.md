@@ -48,12 +48,14 @@ npm install
 npm run dev
 ```
 
-### 4. Publicar (Cloudflare Pages)
+### 4. Publicar
 
-1. Sube este repositorio a GitHub.
-2. En Cloudflare Pages, conecta el repositorio.
-3. Build command `npm run build`, output directory `dist`.
-4. Agrega `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` como variables de entorno.
+Guía paso a paso, para hacer una sola vez: [**DESPLIEGUE.md**](DESPLIEGUE.md).
+
+En corto: la página se publica sola en **GitHub Pages** con cada push a `main`
+(workflow `publicar.yml`). Solo hay que poner `VITE_SUPABASE_URL` y
+`VITE_SUPABASE_ANON_KEY` como **variables** del repositorio. También funciona
+en Cloudflare Pages (build `npm run build`, salida `dist`, mismas variables).
 
 ### 5. Los dos workflows que evitan desastres
 

@@ -138,3 +138,59 @@ export function busquedasParecidas(ficha, busquedas) {
     .filter((x) => x.resultado && x.resultado.valor >= 55)
     .sort((a, b) => b.resultado.valor - a.resultado.valor);
 }
+
+// ------------------------------------------------------------
+// Duplicados y gemelas.
+//
+// Dos riesgos distintos, dos funciones distintas:
+//
+// - DUPLICADO: el mismo animal registrado dos veces (dos cuentas de
+//   Instagram, dos voluntarios). Se revisa ANTES de guardar una ficha.
+//   Pide mismo municipio y fechas cercanas: un animal no aparece en
+//   dos ciudades ni con un mes de diferencia.
+//
+// - GEMELA: dos animales distintos que se parecen mucho y estan ambos
+//   en resguardo. El riesgo es entregar el equivocado. Se revisa al
+//   marcar un reencuentro y al mostrar resultados de busqueda.
+// ------------------------------------------------------------
+
+export const UMBRAL_DUPLICADO = 65;
+export const UMBRAL_GEMELA = 70;
+const DIAS_DUPLICADO = 21;
+
+function diasEntre(a, b) {
+  if (!a || !b) return 0;
+  const ms = Math.abs(new Date(a) - new Date(b));
+  return Number.isNaN(ms) ? 0 : ms / 86400000;
+}
+
+export function posiblesDuplicados(nueva, fichas) {
+  return fichas
+    .filter((f) => f.estado === "resguardo" && f.id !== nueva.id)
+    .filter((f) => !nueva.municipio || !f.municipio || nueva.municipio === f.municipio)
+    .filter((f) => diasEntre(nueva.fecha_hallazgo, f.fecha_hallazgo) <= DIAS_DUPLICADO)
+    .map((f) => ({ ficha: f, resultado: puntaje(nueva, f) }))
+    .filter((x) => x.resultado && x.resultado.valor >= UMBRAL_DUPLICADO)
+    // Si el color o el collar son francamente distintos, no es el mismo
+    // animal. Sin esta guarda, cualquier "perro mediano cafe" dispararia
+    // la alerta y la gente dejaria de leerla.
+    .filter((x) => !x.resultado.difieren.includes("color") && !x.resultado.difieren.includes("color del collar"))
+    .sort((a, b) => b.resultado.valor - a.resultado.valor);
+}
+
+export function fichasGemelas(ficha, fichas) {
+  return fichas
+    .filter((f) => f.estado === "resguardo" && f.id !== ficha.id)
+    .map((f) => ({ ficha: f, resultado: puntaje(ficha, f) }))
+    .filter((x) => x.resultado && x.resultado.valor >= UMBRAL_GEMELA)
+    .sort((a, b) => b.resultado.valor - a.resultado.valor);
+}
+
+// En una lista de resultados ordenada, cuantos candidatos estan
+// "empatados" con el primero. Si son mas de uno, el tutor debe
+// mirar las fotos con calma antes de decidir.
+export function empatadosArriba(resultados, margen = 8) {
+  if (!resultados.length) return [];
+  const tope = resultados[0].resultado.valor;
+  return resultados.filter((x) => tope - x.resultado.valor <= margen && x.resultado.valor >= 55);
+}
