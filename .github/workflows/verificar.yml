@@ -1,0 +1,25 @@
+name: Verificar (CI)
+
+# Corre en cada pull request. Solo comprueba que el proyecto compila.
+# NO publica nada: la pagina en produccion no se toca desde aqui.
+# La vista previa de cada PR la genera Cloudflare Pages por su cuenta.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  compilar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://ci.invalid
+          VITE_SUPABASE_ANON_KEY: ci
