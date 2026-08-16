@@ -497,6 +497,7 @@ export default function App() {
   const [errorGuardar, setErrorGuardar] = useState("");
   const [guardado, setGuardado] = useState(null);
   const [duplicados, setDuplicados] = useState(null);
+  const [avisoFoto, setAvisoFoto] = useState("");
   const [mostrarMapa, setMostrarMapa] = useState(false);
 
   const [filtroEspecie, setFiltroEspecie] = useState("");
@@ -582,22 +583,27 @@ export default function App() {
     setErrorGuardar("");
 
     try {
+      // La foto se sube ANTES de crear la ficha y se guarda todo en un solo
+      // insert. Si se subiera despues, habria que actualizar la ficha, y
+      // RLS solo deja actualizar a voluntarios: la URL nunca quedaria.
+      const id = crypto.randomUUID();
+      let urls = {};
+      let fotoFallo = false;
+      if (archivoFoto) {
+        try {
+          urls = await subirFoto(archivoFoto, id);
+        } catch {
+          fotoFallo = true; // La ficha se guarda igual, sin foto.
+        }
+      }
+
       const { data, error } = await supabase
         .from("mascotas")
-        .insert([{ ...reporte, estado: "resguardo", verificado: false }])
+        .insert([{ id, ...reporte, ...urls, estado: "resguardo", verificado: false }])
         .select()
         .single();
       if (error) throw new Error("No se pudo guardar la ficha. Revisa tu conexión.");
-
-      if (archivoFoto) {
-        try {
-          const urls = await subirFoto(archivoFoto, data.codigo);
-          await supabase.from("mascotas").update(urls).eq("id", data.id);
-          Object.assign(data, urls);
-        } catch {
-          // La ficha ya quedó guardada. La foto se puede agregar después.
-        }
-      }
+      setAvisoFoto(fotoFallo ? "La ficha quedó guardada, pero la foto no se pudo subir. Un voluntario puede agregarla después." : "");
 
       setRegistros((p) => [data, ...p]);
       setGuardado(data.codigo);
@@ -802,6 +808,9 @@ export default function App() {
             <p style={{ margin: "0 0 18px", fontSize: 15, color: T.tintaSuave, lineHeight: 1.55 }}>
               Anota este código en la jaula o el guacal. Es el que se usa para confirmar la entrega.
             </p>
+            {avisoFoto && (
+              <p style={{ margin: "-8px 0 18px", fontSize: 14.5, color: T.rojo, lineHeight: 1.5 }}>{avisoFoto}</p>
+            )}
             <button type="button" onClick={() => setGuardado(null)} style={{
               background: T.verde, color: T.blanco, border: "none", borderRadius: 9,
               padding: "13px 20px", fontSize: 15.5, fontWeight: 660, cursor: "pointer",
