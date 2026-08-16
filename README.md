@@ -89,6 +89,8 @@ Todo corre en planes gratuitos; nadie paga ni cobra por esto.
 
 Cambios: siempre por *pull request* a `main`, con verificación automática de que compila. La rama `main` está protegida.
 
+Esta iniciativa es temporal. Cómo y cuándo se cierra y se borran los datos: [CIERRE.md](CIERRE.md).
+
 Datos personales: qué se guarda, quién lo ve y cómo pedir corrección o retiro está explicado en la propia página (pantalla de inicio, «Tus datos»). Se tratan según la Ley 1581 de 2012.
 
 ## Nada se borra
