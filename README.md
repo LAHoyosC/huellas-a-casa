@@ -108,9 +108,13 @@ Si alguno falla, GitHub avisa por correo a los administradores.
 ## Dar de alta voluntarios
 
 Cualquiera puede registrar una mascota encontrada, pero entra marcada como
-**sin verificar**. Solo un voluntario aprueba fichas y marca reencuentros.
+**sin verificar**. Solo un voluntario con sesión iniciada aprueba fichas,
+marca reencuentros y oculta fichas (enlace «Voluntarios» arriba a la derecha
+de la página).
 
-1. Supabase → **Authentication → Users → Add user**.
+1. Supabase → **Authentication → Users → Add user → Create new user**: correo
+   y contraseña, y marca **Auto Confirm User** (así no depende de un correo
+   de confirmación).
 2. Copia su UUID y corre en el SQL Editor:
 
 ```sql
@@ -118,7 +122,8 @@ insert into voluntarios (id, nombre, refugio)
 values ('PEGA-AQUI-EL-UUID', 'Nombre', 'Refugio');
 ```
 
-(Falta la pantalla de inicio de sesión en la página; es lo siguiente en la lista.)
+Para desactivar a alguien: `update voluntarios set activo = false where id = '...'`.
+Para cambiar una contraseña: Authentication → Users → ⋯ → Reset password.
 
 ---
 
@@ -138,8 +143,7 @@ abrir la ficha. Menos datos móviles para quien busca.
 
 ## Pendientes
 
-- Inicio de sesión para voluntarios (RLS ya protege; falta la pantalla).
-- Panel para aprobar fichas `verificado = false`.
+- Recuperación de contraseña desde la página (hoy la restablece un administrador).
 - Cruce inverso: mascota nueva contra búsquedas abiertas (`busquedasParecidas()` ya existe).
 - Migraciones automáticas desde CI (staging al abrir PR, producción al mergear).
 - **Protocolo de entrega**: qué prueba pide un refugio antes de entregar un animal. Lo define el refugio, no el código.
