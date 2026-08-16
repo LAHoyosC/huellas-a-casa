@@ -1,12 +1,21 @@
-// Configuracion para Cloudflare (Workers con archivos estaticos).
-// Cloudflare corre `npm run build` y luego `npx wrangler deploy`;
-// este archivo le dice que sirva la carpeta dist tal cual.
+// Configuracion para Cloudflare (Worker + archivos estaticos + R2).
+// Cloudflare corre `npm run build` y luego `npx wrangler deploy`.
+//
+// - Los archivos de dist/ se sirven tal cual (la pagina).
+// - /api/fotos/* y /fotos/* los atiende worker/index.js: sube y sirve las
+//   fotos desde el bucket R2 "huellas-fotos". R2 da 10 GB gratis y la
+//   salida de datos no se cobra nunca, asi que ver fotos no gasta cuota.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "huellas-a-casa",
+  "main": "worker/index.js",
   "compatibility_date": "2026-08-01",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/fotos/*"]
+  },
+  "r2_buckets": [
+    { "binding": "FOTOS", "bucket_name": "huellas-fotos" }
+  ]
 }

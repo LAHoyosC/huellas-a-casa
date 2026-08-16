@@ -83,7 +83,8 @@ Todo corre en planes gratuitos; nadie paga ni cobra por esto.
 | Pieza | Dónde | Qué guarda |
 |---|---|---|
 | Página web | Cloudflare Workers (https://huellas-a-casa.huellas-a-casa.workers.dev) | Solo archivos estáticos. Se recompila sola con cada cambio en `main`. |
-| Base de datos y fotos | Supabase, plan gratuito, región Virginia (EE. UU.) | Fichas, búsquedas, historial de cambios, fotos. Protegido con RLS. |
+| Base de datos | Supabase, plan gratuito, región Virginia (EE. UU.) | Fichas, búsquedas, historial de cambios. Protegido con RLS. |
+| Fotos | Cloudflare R2, bucket `huellas-fotos` (10 GB gratis, salida sin costo) | Las sube y sirve el Worker (`worker/index.js`). |
 | Código | Este repositorio, público | Cualquiera puede revisar qué hace la página con los datos. |
 | Respaldos | Repositorio privado `huellas-a-casa-respaldos`, copia cada noche | Privado porque los respaldos incluyen contactos de particulares. |
 
@@ -113,21 +114,15 @@ values ('PEGA-AQUI-EL-UUID', 'Nombre', 'Refugio');
 
 ---
 
-## Límites del plan gratuito
+## Límites de los planes gratuitos
 
-| Recurso | Límite | Qué significa aquí |
-|---|---|---|
-| Base de datos | 500 MB | Muchísimo. Son solo datos, no fotos. |
-| Almacenamiento | 1 GB | ~5.000 fotos comprimidas. Sin comprimir, 250. |
-| Tráfico de salida | 5 GB/mes | **El límite que primero se agota.** |
+| Recurso | Dónde | Límite | Qué significa aquí |
+|---|---|---|---|
+| Base de datos | Supabase | 500 MB | Muchísimo. Son solo datos, no fotos. |
+| Fotos | Cloudflare R2 | 10 GB, salida gratis | ~45.000 mascotas. Ver fotos no gasta cuota. |
+| Peticiones del Worker | Cloudflare | 100.000 al día | Cada foto vista es una petición: alcanza para varios miles de visitas diarias. |
 
-El tráfico se consume cada vez que alguien *ve* una foto. Si la página se vuelve viral y mil personas revisan un listado de 30 fotos, ahí van 6 GB en un día.
-
-Por eso [`src/lib/foto.js`](src/lib/foto.js) comprime a ~200 KB y guarda una miniatura de 320px aparte: el listado usa la miniatura, la grande solo se carga al abrir la ficha.
-
-**Si esto crece:** mover las fotos a Cloudflare R2. Da 10 GB gratis y la salida de datos no se cobra nunca, así que el problema del tráfico desaparece. Es la mejora que más rinde si el proyecto escala a los cuatro departamentos.
-
----
+Aun así [`src/lib/foto.js`](src/lib/foto.js) comprime a ~200 KB y guarda una miniatura de 320px aparte: el listado usa la miniatura, la grande solo se carga al abrir la ficha. Menos datos móviles para quien busca.
 
 ## Antes de abrir al público
 
