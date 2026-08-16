@@ -1,55 +1,98 @@
-name: Respaldo diario
+name: Respaldo de la base de datos
 
-# Saca una copia completa de la base todas las noches y la guarda en
-# este mismo repositorio. Es lo unico que los protege de un borrado
-# accidental: el plan gratuito de Supabase NO tiene backups.
+# Saca una copia completa de la base todas las noches y la guarda en un
+# repositorio PRIVADO aparte (huellas-a-casa-respaldos). Es lo unico que
+# los protege de un borrado accidental: el plan gratuito de Supabase NO
+# tiene backups.
 #
-# Configurar una sola vez:
-#   Settings > Secrets and variables > Actions > New repository secret
-#   Nombre: SUPABASE_DB_URL
-#   Valor:  la cadena de conexion de Supabase
-#           (Project Settings > Database > Connection string > URI)
+# Por que privado y aparte: los respaldos traen telefonos de particulares
+# (tabla busquedas). Este repositorio es publico; alli no pueden ir.
+#
+# Retencion: los diarios se conservan 30 dias; el del dia 1 de cada mes
+# se conserva para siempre.
+#
+# Secretos necesarios (Settings > Secrets and variables > Actions):
+#   SUPABASE_DB_URL    Cadena de conexion de Supabase. OJO: usar la del
+#                      POOLER en modo Session (Project Settings > Database
+#                      > Connection string > Method: Session pooler). La
+#                      conexion "directa" es solo IPv6 y desde GitHub no
+#                      llega.
+#   RESPALDO_SSH_KEY   Llave privada con permiso de escritura en el
+#                      repositorio de respaldos (ya configurada).
 
 on:
   schedule:
     - cron: "0 7 * * *"   # 2:00 a.m. hora de Colombia
   workflow_dispatch:       # y tambien a mano, desde la pestana Actions
 
+env:
+  REPO_RESPALDOS: git@github.com:LAHoyosC/huellas-a-casa-respaldos.git
+
 jobs:
   respaldar:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Instalar cliente de Postgres
+      - name: Instalar cliente de Postgres 17
+        # El cliente debe ser igual o mas nuevo que el servidor de Supabase.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+          pg_dump --version
+
+      - name: Preparar llave SSH
+        env:
+          LLAVE: ${{ secrets.RESPALDO_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$LLAVE" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Traer el repositorio de respaldos
+        run: |
+          git clone --depth 1 "$REPO_RESPALDOS" respaldos
+          cd respaldos
+          git config user.name  "respaldo-automatico"
+          git config user.email "actions@github.com"
+          # Si el repositorio esta vacio, arrancar la rama main
+          git rev-parse HEAD >/dev/null 2>&1 || git checkout -b main
 
       - name: Sacar la copia
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          mkdir -p respaldos
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::Falta el secreto SUPABASE_DB_URL."; exit 1
+          fi
+          mkdir -p respaldos/diarios respaldos/mensuales
           FECHA=$(date +%Y-%m-%d)
-          pg_dump "$SUPABASE_DB_URL" \
-            --no-owner --no-privileges \
-            --schema=public \
-            | gzip > "respaldos/huellas-a-casa-$FECHA.sql.gz"
-          ls -lh respaldos/
+          ARCHIVO="respaldos/diarios/huellas-a-casa-$FECHA.sql.gz"
+          if ! pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges --schema=public \
+               | gzip > "$ARCHIVO"; then
+            echo "::error::pg_dump fallo. Si el error es de conexion (timeout / could not connect), revisa que SUPABASE_DB_URL sea la del Session pooler, no la directa."
+            exit 1
+          fi
+          # Un dump vacio o minusculo es senal de que algo salio mal
+          TAM=$(stat -c %s "$ARCHIVO")
+          echo "Tamano del respaldo: $TAM bytes"
+          if [ "$TAM" -lt 500 ]; then
+            echo "::error::El respaldo quedo casi vacio ($TAM bytes). No se guarda."; exit 1
+          fi
+          # El dia 1 de cada mes se guarda ademas una copia permanente
+          if [ "$(date +%d)" = "01" ]; then
+            cp "$ARCHIVO" "respaldos/mensuales/huellas-a-casa-$(date +%Y-%m).sql.gz"
+          fi
 
-      - name: Dejar solo los ultimos 30 dias
+      - name: Dejar solo los ultimos 30 diarios
+        run: |
+          cd respaldos/diarios
+          ls -1t *.sql.gz 2>/dev/null | tail -n +31 | xargs -r rm --
+
+      - name: Guardar en el repositorio privado
         run: |
           cd respaldos
-          ls -1t *.sql.gz | tail -n +31 | xargs -r rm --
-          cd ..
-
-      - name: Guardar en el repositorio
-        run: |
-          git config user.name  "respaldo-automatico"
-          git config user.email "actions@github.com"
-          git add respaldos/
-          git diff --staged --quiet || git commit -m "Respaldo $(date +%Y-%m-%d)"
-          git push
+          git add -A
+          git diff --staged --quiet && { echo "Nada nuevo"; exit 0; }
+          git commit -m "Respaldo $(date +%Y-%m-%d)"
+          git push origin HEAD:main
