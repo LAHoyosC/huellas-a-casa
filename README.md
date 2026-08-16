@@ -102,15 +102,23 @@ No hay `DELETE` en toda la aplicación. Marcar como reencontrado cambia un campo
 
 ## Dar de alta voluntarios
 
-Cualquiera puede registrar una mascota encontrada, pero entra marcada como **sin verificar**. Solo un voluntario aprueba fichas y marca reencuentros.
+Cualquiera puede registrar una mascota encontrada, pero entra marcada como
+**sin verificar**. Solo un voluntario con sesión iniciada aprueba fichas,
+marca reencuentros y oculta fichas (enlace «Voluntarios» arriba a la derecha
+de la página).
 
-1. La persona se registra, o créala en **Authentication → Users**.
+1. Supabase → **Authentication → Users → Add user → Create new user**: correo
+   y contraseña, y marca **Auto Confirm User** (así no depende de un correo
+   de confirmación).
 2. Copia su UUID y corre en el SQL Editor:
 
 ```sql
 insert into voluntarios (id, nombre, refugio)
 values ('PEGA-AQUI-EL-UUID', 'Nombre', 'Refugio');
 ```
+
+Para desactivar a alguien: `update voluntarios set activo = false where id = '...'`.
+Para cambiar una contraseña: Authentication → Users → ⋯ → Reset password.
 
 ---
 
