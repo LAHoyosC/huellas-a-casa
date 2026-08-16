@@ -303,9 +303,11 @@ function Aviso() {
             quien cuida un animal <em>se publican</em> en su ficha, para que el tutor pueda escribir.
             El contacto de quien busca a su mascota <em>no se publica</em>: solo lo ven los
             voluntarios, para avisarle si llega algo parecido.</li>
-          <li><strong style={{ fontWeight: 660 }}>Cuánto tiempo:</strong> mientras la ficha o la
-            búsqueda estén activas. Cuando el animal vuelve a casa, la ficha se marca como
-            reencontrada y deja de mostrarse en el listado.</li>
+          <li><strong style={{ fontWeight: 660 }}>Cuánto tiempo:</strong> esta es una iniciativa
+            temporal, por la emergencia. Cada tres meses revisamos si sigue haciendo falta. Cuando se
+            cierre, <em>borramos todo</em> —la base de datos, las fotos y los respaldos— en máximo
+            30 días, y la página queda solo con un aviso de que terminó. Mientras tanto, cuando un
+            animal vuelve a casa su ficha deja de mostrarse en el listado.</li>
           <li><strong style={{ fontWeight: 660 }}>Tus derechos:</strong> puedes pedir que corrijamos
             o retiremos tus datos cuando quieras escribiendo a{" "}
             <a href={`mailto:${CONTACTO_DATOS}`} style={{ color: T.verde }}>{CONTACTO_DATOS}</a>.
