@@ -15,6 +15,10 @@ const T = {
   rojo: "#B03A28", blanco: "#FFFFFF",
 };
 
+// Canal para pedir correccion o retiro de datos personales. CAMBIAR por
+// el correo o WhatsApp real del grupo de voluntarios antes de difundir.
+const CONTACTO_DATOS = "huellasacasa.eje@gmail.com";
+
 const FUENTE = `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
 const MONO = `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
 
@@ -23,6 +27,31 @@ const entradaTexto = {
   border: `1.5px solid ${T.linea}`, background: T.blanco, fontSize: 15,
   color: T.tinta, fontFamily: FUENTE, boxSizing: "border-box",
 };
+
+// Medios de contacto. El valor guardado en contacto_telefono es el
+// numero, el correo o el usuario segun el medio elegido.
+const MEDIOS = ["WhatsApp", "Correo", "Instagram"];
+const MEDIO_PISTA = { WhatsApp: "10 dígitos", Correo: "nombre@correo.com", Instagram: "@usuario" };
+
+function enlaceContacto(medio, valor) {
+  const v = (valor || "").trim();
+  if (medio === "Correo") return `mailto:${v}`;
+  if (medio === "Instagram") return `https://instagram.com/${v.replace(/^@/, "")}`;
+  return `https://wa.me/57${v.replace(/\D/g, "")}`;
+}
+
+function CampoContacto({ medio, valor, onMedio, onValor, placeholderNombre }) {
+  const m = medio || "WhatsApp";
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {MEDIOS.map((o) => <Opcion key={o} activo={m === o} onClick={() => onMedio(o)}>{o}</Opcion>)}
+      </div>
+      <input style={entradaTexto} inputMode={m === "WhatsApp" ? "tel" : m === "Correo" ? "email" : "text"}
+        value={valor || ""} onChange={(e) => onValor(e.target.value)} placeholder={MEDIO_PISTA[m]} />
+    </div>
+  );
+}
 
 /* ------------------------------ PIEZAS ----------------------------- */
 
@@ -189,14 +218,14 @@ function Ficha({ r, resultado, nombres, onReencontrar }) {
             ) : (
               <>
                 <a
-                  href={`https://wa.me/57${(r.contacto_telefono || "").replace(/\D/g, "")}`}
+                  href={enlaceContacto(r.contacto_medio, r.contacto_telefono)}
                   target="_blank" rel="noreferrer"
                   style={{
                     background: T.verde, color: T.blanco, textDecoration: "none",
                     padding: "9px 14px", borderRadius: 8, fontSize: 14, fontWeight: 640,
                   }}
                 >
-                  Escribir a {r.contacto_nombre}
+                  Escribir a {r.contacto_nombre}{r.contacto_medio && r.contacto_medio !== "WhatsApp" ? ` por ${r.contacto_medio}` : ""}
                 </a>
                 <button
                   type="button" onClick={() => onReencontrar(r)}
@@ -214,6 +243,79 @@ function Ficha({ r, resultado, nombres, onReencontrar }) {
         </div>
       </div>
     </article>
+  );
+}
+
+function Bloque({ titulo, children }) {
+  return (
+    <div>
+      <div style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".12em", color: T.verde, marginBottom: 6 }}>
+        {titulo}
+      </div>
+      <div style={{ fontSize: 15, lineHeight: 1.6, color: T.tinta }}>{children}</div>
+    </div>
+  );
+}
+
+function Aviso() {
+  return (
+    <div style={{
+      border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco,
+      padding: "24px 24px", display: "grid", gap: 22,
+    }} id="aviso">
+      <Bloque titulo="QUIÉNES SOMOS">
+        Somos voluntarios, refugios y hogares temporales del Eje Cafetero que nos juntamos para que
+        la información de las mascotas perdidas y encontradas quede en un solo lugar y no regada en
+        publicaciones sueltas. No somos una empresa ni una entidad oficial: es una herramienta
+        comunitaria sostenida por gente que dona su tiempo.
+      </Bloque>
+
+      <Bloque titulo="ESTO ES GRATUITO">
+        Buscar, registrar y confirmar un reencuentro no cuesta nada, ni ahora ni después.{" "}
+        <strong style={{ fontWeight: 660 }}>Nadie de esta página pide dinero.</strong> Si alguien te
+        pide un pago, una recompensa o una «consignación para el transporte» en nombre de Huellas a
+        Casa, es un engaño: no lo hagas y avísanos.
+      </Bloque>
+
+      <Bloque titulo="LO QUE ESTA PÁGINA NO HACE">
+        Aquí solo se junta información. No verificamos la identidad de quien registra un animal ni de
+        quien lo reclama, y el porcentaje de parecido sale de las respuestas del formulario, no de la
+        foto: puede equivocarse. La entrega es un acuerdo entre quien cuida al animal y quien lo
+        reclama; cada refugio decide qué prueba pide antes de entregar. Hacemos lo posible por que los
+        datos estén al día, pero no respondemos por errores en las fichas, por entregas equivocadas
+        ni por lo que pase fuera de la página. Si ves algo mal, escríbenos y lo corregimos.
+      </Bloque>
+
+      <Bloque titulo="CÓDIGO ABIERTO">
+        Todo el código de esta página es público y cualquiera puede revisarlo:{" "}
+        <a href="https://github.com/LAHoyosC/huellas-a-casa" target="_blank" rel="noreferrer"
+          style={{ color: T.verde }}>github.com/LAHoyosC/huellas-a-casa</a>. Ahí también está explicado
+        cómo funciona el cruce y dónde se guardan los datos.
+      </Bloque>
+
+      <Bloque titulo="TUS DATOS">
+        <ul style={{ margin: 0, paddingLeft: 20 }}>
+          <li><strong style={{ fontWeight: 660 }}>Qué guardamos:</strong> los rasgos y la foto del
+            animal, el municipio y barrio, y un nombre y un contacto (WhatsApp, correo o Instagram).</li>
+          <li><strong style={{ fontWeight: 660 }}>Para qué:</strong> únicamente para reunir animales
+            con sus familias. No los usamos para nada más ni se los pasamos a nadie.</li>
+          <li><strong style={{ fontWeight: 660 }}>Quién los ve:</strong> el nombre y WhatsApp de
+            quien cuida un animal <em>se publican</em> en su ficha, para que el tutor pueda escribir.
+            El contacto de quien busca a su mascota <em>no se publica</em>: solo lo ven los
+            voluntarios, para avisarle si llega algo parecido.</li>
+          <li><strong style={{ fontWeight: 660 }}>Cuánto tiempo:</strong> mientras la ficha o la
+            búsqueda estén activas. Cuando el animal vuelve a casa, la ficha se marca como
+            reencontrada y deja de mostrarse en el listado.</li>
+          <li><strong style={{ fontWeight: 660 }}>Tus derechos:</strong> puedes pedir que corrijamos
+            o retiremos tus datos cuando quieras escribiendo a{" "}
+            <a href={`mailto:${CONTACTO_DATOS}`} style={{ color: T.verde }}>{CONTACTO_DATOS}</a>.
+            Tratamos los datos según la Ley 1581 de 2012 de Colombia.</li>
+        </ul>
+        <p style={{ margin: "10px 0 0", fontSize: 14, color: T.tintaSuave }}>
+          Al guardar una ficha o una búsqueda con tu contacto, autorizas este uso.
+        </p>
+      </Bloque>
+    </div>
   );
 }
 
@@ -371,10 +473,10 @@ export default function App() {
   const [errorCarga, setErrorCarga] = useState("");
   const [modo, setModo] = useState("inicio");
 
-  const [busqueda, setBusqueda] = useState({ senas: [] });
+  const [busqueda, setBusqueda] = useState({ senas: [], contacto_medio: "WhatsApp" });
   const [resultados, setResultados] = useState(null);
 
-  const [reporte, setReporte] = useState({ senas: [], fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+  const [reporte, setReporte] = useState({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
   const [archivoFoto, setArchivoFoto] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState("");
@@ -479,7 +581,7 @@ export default function App() {
 
       setRegistros((p) => [data, ...p]);
       setGuardado(data.codigo);
-      setReporte({ senas: [], fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+      setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
       setArchivoFoto(null);
     } catch (e) {
       setErrorGuardar(e.message);
@@ -575,6 +677,7 @@ export default function App() {
             </p>
           </div>
         )}
+        {modo === "inicio" && <div style={{ marginTop: 18 }}><Aviso /></div>}
 
         {modo === "buscar" && !resultados && (
           <section>
@@ -601,12 +704,16 @@ export default function App() {
                 onChange={(e) => setB("nombres", e.target.value)} placeholder="Ej.: Luna, Lunita" />
             </Campo>
 
-            <Campo numero="13" titulo="Tu WhatsApp"
-              ayuda="Solo lo ven los voluntarios. Si llega una mascota parecida, te avisan sin que tengas que volver a entrar." opcional>
-              <input style={entradaTexto} inputMode="tel" value={busqueda.contacto_telefono || ""}
-                onChange={(e) => setB("contacto_telefono", e.target.value)} placeholder="10 dígitos" />
+            <Campo numero="13" titulo="¿Por dónde te avisamos?"
+              ayuda="No se publica: solo lo ven los voluntarios. Si llega una mascota parecida, te avisan sin que tengas que volver a entrar." opcional>
+              <CampoContacto medio={busqueda.contacto_medio} valor={busqueda.contacto_telefono}
+                onMedio={(m) => setB("contacto_medio", m)} onValor={(v) => setB("contacto_telefono", v)} />
             </Campo>
 
+            <p style={{ margin: "0 0 12px 25px", fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
+              Si dejas un contacto, autorizas que los voluntarios lo usen solo para avisarte.{" "}
+              <a href="#aviso" onClick={() => setModo("inicio")} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
+            </p>
             <button type="button" onClick={buscar} style={{
               background: T.verde, color: T.blanco, border: "none", borderRadius: 10,
               padding: "16px 26px", fontSize: 17, fontWeight: 680, cursor: "pointer",
@@ -711,12 +818,13 @@ export default function App() {
                 onChange={(e) => setR("lugar", e.target.value)} placeholder="Ej.: Albergue Huellas de Esperanza" />
             </Campo>
 
-            <Campo numero="15" titulo="Quién responde y por dónde">
+            <Campo numero="15" titulo="Quién responde y por dónde"
+              ayuda="Este nombre y contacto se publican en la ficha para que el tutor escriba. Pon el del refugio o un número que puedas mostrar; no uses uno personal si no quieres que quede visible.">
               <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                 <input style={entradaTexto} value={reporte.contacto_nombre || ""}
                   onChange={(e) => setR("contacto_nombre", e.target.value)} placeholder="Nombre de quien atiende" />
-                <input style={entradaTexto} inputMode="tel" value={reporte.contacto_telefono || ""}
-                  onChange={(e) => setR("contacto_telefono", e.target.value)} placeholder="WhatsApp, 10 dígitos" />
+                <CampoContacto medio={reporte.contacto_medio} valor={reporte.contacto_telefono}
+                  onMedio={(m) => setR("contacto_medio", m)} onValor={(v) => setR("contacto_telefono", v)} />
               </div>
             </Campo>
 
@@ -748,7 +856,7 @@ export default function App() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
                   <button type="button" onClick={() => {
                     setDuplicados(null);
-                    setReporte({ senas: [], fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+                    setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
                     setArchivoFoto(null);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }} style={{
@@ -772,6 +880,11 @@ export default function App() {
               borderRadius: 10, padding: "16px 26px", fontSize: 17, fontWeight: 680,
               cursor: guardando ? "wait" : "pointer", marginLeft: 25, marginTop: 6,
             }}>{guardando ? "Guardando…" : "Guardar ficha"}</button>
+            <p style={{ margin: "12px 0 0 25px", fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
+              Al guardar, autorizas que el nombre y el contacto se publiquen en la ficha, solo para
+              reunir al animal con su familia.{" "}
+              <a href="#aviso" onClick={() => setModo("inicio")} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
+            </p>
           </section>
         )}
 

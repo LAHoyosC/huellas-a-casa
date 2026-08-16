@@ -76,6 +76,21 @@ Corran los dos a mano una vez desde la pestaña **Actions** para verificar que f
 
 ---
 
+## Infraestructura y transparencia
+
+Todo corre en planes gratuitos; nadie paga ni cobra por esto.
+
+| Pieza | Dónde | Qué guarda |
+|---|---|---|
+| Página web | Cloudflare Workers (https://huellas-a-casa.huellas-a-casa.workers.dev) | Solo archivos estáticos. Se recompila sola con cada cambio en `main`. |
+| Base de datos y fotos | Supabase, plan gratuito, región Virginia (EE. UU.) | Fichas, búsquedas, historial de cambios, fotos. Protegido con RLS. |
+| Código | Este repositorio, público | Cualquiera puede revisar qué hace la página con los datos. |
+| Respaldos | Repositorio privado `huellas-a-casa-respaldos`, copia cada noche | Privado porque los respaldos incluyen contactos de particulares. |
+
+Cambios: siempre por *pull request* a `main`, con verificación automática de que compila. La rama `main` está protegida.
+
+Datos personales: qué se guarda, quién lo ve y cómo pedir corrección o retiro está explicado en la propia página (pantalla de inicio, «Tus datos»). Se tratan según la Ley 1581 de 2012.
+
 ## Nada se borra
 
 No hay `DELETE` en toda la aplicación. Marcar como reencontrado cambia un campo de estado; retirar una ficha la oculta. Además el permiso de borrado está revocado a nivel de Postgres, así que ni un error de código puede borrar. Cada cambio queda en la tabla `historial`.
