@@ -9,7 +9,8 @@
 // ============================================================
 
 const MAXIMO_BYTES = 2 * 1024 * 1024;
-const RUTA_VALIDA = /^[a-z0-9-]+\/[A-Z]{3}-\d{4,}\/\d+-(grande|mini)\.jpg$/;
+// <entorno>/<id de la ficha>/<sello>-grande.jpg
+const RUTA_VALIDA = /^(prod|staging)\/[A-Za-z0-9-]{1,64}\/\d+-(grande|mini)\.jpg$/;
 
 export default {
   async fetch(request, env) {

@@ -1,10 +1,11 @@
 # Cómo poner esto en línea (paso a paso, gratis)
 
-Son dos piezas: la **base de datos** (Supabase) y la **página** (GitHub
-Pages). Ninguna cobra. Se hace una sola vez y toma unos 20 minutos.
+Son dos piezas: la **base de datos** (Supabase) y la **página** (Cloudflare).
+Ninguna cobra. Esto ya está hecho; queda documentado por si hay que
+rehacerlo o entender qué hay.
 
-Después de esto la página queda en:
-**https://lahoyosc.github.io/huellas-a-casa/**
+La página está en:
+**https://huellas-a-casa.huellas-a-casa.workers.dev**
 
 ---
 
@@ -32,39 +33,32 @@ Después de esto la página queda en:
    en las reglas que ya instalaron las migraciones.
 
 ---
+## Parte 2 — Página (Cloudflare)
 
-## Parte 2 — Página (GitHub Pages)
+El Worker `huellas-a-casa` en Cloudflare está conectado a este repositorio
+y se recompila solo con cada cambio en `main`. La URL y la llave de
+Supabase van en `.env.production` (son públicas), así que no hay variables
+que configurar en Cloudflare.
 
-Todo esto es en https://github.com/LAHoyosC/huellas-a-casa
+Si hubiera que rehacerlo desde cero: Cloudflare → Workers & Pages → Create
+→ Import a repository → este repo. Build command `npm run build`, deploy
+command `npx wrangler deploy` (lo define `wrangler.jsonc`). Antes, crear el
+bucket R2 `huellas-fotos` (R2 → Create bucket) y activar el subdominio
+`workers.dev` del Worker (Settings → Domains & Routes).
 
-1. **Settings** → **Secrets and variables** → **Actions**.
-2. Pestaña **Variables** → **New repository variable**. Crea dos:
+En GitHub → **Settings → Secrets and variables → Actions → Secrets**, para
+los robots de respaldo y anti-pausa:
 
-   | Name | Value |
-   |---|---|
-   | `VITE_SUPABASE_URL` | el Project URL de Supabase |
-   | `VITE_SUPABASE_ANON_KEY` | la llave anon public |
+| Name | Value |
+|---|---|
+| `SUPABASE_URL` | el Project URL |
+| `SUPABASE_ANON_KEY` | la llave anon / publishable |
+| `SUPABASE_DB_URL` | Supabase → **Connect** → **Session pooler** → URI, con la contraseña puesta. La conexión «directa» no sirve desde GitHub: es solo IPv6. |
+| `RESPALDO_SSH_KEY` | llave privada con permiso de escritura en `huellas-a-casa-respaldos` (ya configurada) |
 
-3. Pestaña **Secrets** → **New repository secret**. Crea tres (estos sí
-   son para los robots de respaldo y anti-pausa):
-
-   | Name | Value |
-   |---|---|
-   | `SUPABASE_URL` | el mismo Project URL |
-   | `SUPABASE_ANON_KEY` | la misma llave anon |
-   | `SUPABASE_DB_URL` | Supabase → Project Settings → **Database** → Connection string → **URI**. Reemplaza `[YOUR-PASSWORD]` por la contraseña del paso 2 de la Parte 1. |
-
-4. Pestaña **Actions** (arriba, en el menú del repositorio) → a la
-   izquierda **Publicar en GitHub Pages** → botón **Run workflow** → **Run
-   workflow**. Tarda 1-2 minutos. Cuando quede verde, la página está en
-   línea.
-
-   Si la corrida falla con un mensaje sobre permisos de Pages: **Settings**
-   → **Pages** → **Source** → elige **GitHub Actions**, y vuelve a correr.
-
-5. En la misma pestaña **Actions**, corre a mano una vez **Respaldo de la
-   base de datos** y **Mantener el proyecto despierto**. Los dos deben quedar
-   verdes. Si alguno falla, revisa los secretos del paso 3.
+Después, en la pestaña **Actions**, correr a mano una vez **Respaldo de la
+base de datos** y **Mantener el proyecto despierto**. Ambos deben quedar
+verdes.
 
 ---
 
@@ -86,18 +80,16 @@ Para que alguien pueda aprobar fichas y marcar reencuentros:
 en la lista. Ver CONTEXTO.md.)
 
 ---
-
 ## Cuando algo cambia en el código
 
-Cada `git push` a `main` vuelve a publicar la página solo. No hay que
-hacer nada más.
+Cada merge a `main` vuelve a publicar la página solo. Los PR se prueban
+antes en su URL de vista previa (base de staging).
 
-## Si algún día se quiere dominio propio o Cloudflare
+## Dominio propio
 
-La página funciona igual en Cloudflare Pages: conectar el repositorio,
-build `npm run build`, salida `dist`, y las mismas dos variables de
-entorno. En ese caso **no** se define `VITE_BASE`. GitHub Pages sirve
-bien mientras tanto y no exige registrar tarjeta.
+Cuando haya nombre decidido: comprar el dominio (Cloudflare Registrar lo
+vende a costo, ~US$10/año) y en el Worker → Settings → Domains & Routes →
+Add custom domain. HTTPS es automático.
 
 ---
 

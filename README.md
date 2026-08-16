@@ -1,78 +1,47 @@
 # Huellas a Casa
 
-Registro unificado de mascotas perdidas y encontradas para Risaralda, Quindío, Caldas y Valle del Cauca.
+Registro unificado de mascotas perdidas y encontradas para Risaralda, Quindío,
+Caldas y Valle del Cauca.
 
-Refugios, hogares temporales y familias que acogen registran en un mismo lugar. Los tutores buscan respondiendo un formulario de opciones, sin escribir descripciones largas.
+**Página:** https://huellas-a-casa.huellas-a-casa.workers.dev
+
+Refugios, hogares temporales y familias que acogen registran en un mismo
+lugar. Los tutores buscan respondiendo un formulario de opciones, sin
+escribir descripciones largas. Es gratuito, comunitario y temporal: existe
+por la emergencia y se cierra cuando deje de hacer falta ([CIERRE.md](CIERRE.md)).
 
 ---
 
 ## Cómo funciona el cruce
 
-Casi todo el formulario es de selección. Eso es lo que hace posible comparar: si un voluntario escribe "cafecito con manchitas" y el tutor escribe "marrón con blanco", ningún sistema los cruza. Con vocabulario cerrado, sí.
+Casi todo el formulario es de selección. Eso es lo que hace posible comparar:
+si un voluntario escribe "cafecito con manchitas" y el tutor escribe "marrón
+con blanco", ningún sistema los cruza. Con vocabulario cerrado, sí.
 
 Tres reglas gobiernan el puntaje:
 
-1. **Solo se comparan los campos que ambas partes respondieron.** Alguien conmocionado que no recuerda la cola no pierde coincidencias.
-2. **Los valores vecinos suman parcial.** Beige y blanco no son iguales, pero tampoco son lo mismo que blanco y negro.
-3. **La nota libre solo suma, nunca resta.** Si el tutor menciona algo y la ficha no lo confirma, no es evidencia en contra: el voluntario pudo no haberse fijado.
+1. **Solo se comparan los campos que ambas partes respondieron.** Alguien
+   conmocionado que no recuerda la cola no pierde coincidencias.
+2. **Los valores vecinos suman parcial.** Beige y blanco no son iguales, pero
+   tampoco son lo mismo que blanco y negro.
+3. **La nota libre solo suma, nunca resta.** Si el tutor menciona algo y la
+   ficha no lo confirma, no es evidencia en contra: el voluntario pudo no
+   haberse fijado.
 
-La nota se cruza por significado, no por palabras exactas. "cojea", "renquea" y "camina mal" son lo mismo para el sistema. Ese diccionario vive en [`src/lib/conceptos.js`](src/lib/conceptos.js) y **lo puede editar cualquiera sin saber programar**.
+La nota se cruza por significado, no por palabras exactas: "cojea", "renquea"
+y "camina mal" son lo mismo para el sistema. Ese diccionario vive en
+[`src/lib/conceptos.js`](src/lib/conceptos.js) y **lo puede editar cualquiera
+sin saber programar**.
 
-**La foto no se usa para el cruce.** Es para que el humano confirme. El cotejo automático de imágenes falla mucho con animales sucios, mojados y asustados, y un porcentaje al lado de una foto hace que la gente le crea al número por encima de sus propios ojos. Eso, en este contexto, termina en entregas equivocadas.
+**La foto no se usa para el cruce.** Es para que el humano confirme. El cotejo
+automático de imágenes falla mucho con animales sucios, mojados y asustados,
+y un porcentaje al lado de una foto hace que la gente le crea al número por
+encima de sus propios ojos.
 
----
-
-## Montaje
-
-### 1. Base de datos (Supabase)
-
-No necesitas cuenta de AWS. Supabase corre sobre servidores de Amazon pero tú solo te registras en Supabase.
-
-1. Crea una cuenta en [supabase.com](https://supabase.com) y un proyecto nuevo.
-2. **Elige la región con cuidado: es prácticamente permanente.** Para Colombia, `us-east-1` (Virginia) suele responder mejor que São Paulo, porque el tráfico colombiano sale por Miami.
-3. Abre **SQL Editor**, pega los archivos de [`supabase/migrations/`](supabase/migrations/), en orden, completo y dale RUN.
-4. En **Project Settings → API** copia el Project URL y la llave `anon`.
-
-### 2. Variables
-
-```bash
-cp .env.example .env
-```
-
-Pega los dos valores. Son públicos: van dentro del navegador y cualquiera puede verlos. **La seguridad real está en las políticas RLS de Postgres**, no en esconder estas llaves. Por eso el paso 3 del schema no es opcional.
-
-### 3. Correr en local
-
-```bash
-npm install
-npm run dev
-```
-
-### 4. Publicar
-
-Guía paso a paso, para hacer una sola vez: [**DESPLIEGUE.md**](DESPLIEGUE.md).
-
-En corto: la página se publica sola en **GitHub Pages** con cada push a `main`
-(workflow `publicar.yml`). Solo hay que poner `VITE_SUPABASE_URL` y
-`VITE_SUPABASE_ANON_KEY` como **variables** del repositorio. También funciona
-en Cloudflare Pages (build `npm run build`, salida `dist`, mismas variables).
-
-### 5. Los dos workflows que evitan desastres
-
-En **Settings → Secrets and variables → Actions**, agrega:
-
-| Secreto | Dónde sacarlo |
-|---|---|
-| `SUPABASE_DB_URL` | Project Settings → Database → Connection string → URI |
-| `SUPABASE_URL` | Project Settings → API → Project URL |
-| `SUPABASE_ANON_KEY` | Project Settings → API → anon public |
-
-Con eso quedan andando:
-
-- **`respaldo.yml`** — copia completa de la base cada noche, guardada en este mismo repositorio. **El plan gratuito de Supabase no tiene backups.** Esto es lo único que los protege de un borrado accidental.
-- **`mantener-activo.yml`** — los proyectos gratuitos se pausan solos tras 7 días sin consultas. Si eso pasa, la página queda muerta hasta que alguien entre al panel. Esto lo evita.
-
-Corran los dos a mano una vez desde la pestaña **Actions** para verificar que funcionan. No esperen a necesitarlos.
+El mismo motor evita dos errores frecuentes: antes de guardar una ficha avisa
+si el mismo animal parece ya registrado (**duplicados**), y al marcar un
+reencuentro avisa si hay otros animales en resguardo muy parecidos
+(**gemelas**), para no entregar el equivocado.
 
 ---
 
@@ -82,21 +51,57 @@ Todo corre en planes gratuitos; nadie paga ni cobra por esto.
 
 | Pieza | Dónde | Qué guarda |
 |---|---|---|
-| Página web | Cloudflare Workers (https://huellas-a-casa.huellas-a-casa.workers.dev) | Solo archivos estáticos. Se recompila sola con cada cambio en `main`. |
-| Base de datos | Supabase, plan gratuito, región Virginia (EE. UU.) | Fichas, búsquedas, historial de cambios. Protegido con RLS. |
-| Fotos | Cloudflare R2, bucket `huellas-fotos` (10 GB gratis, salida sin costo) | Las sube y sirve el Worker (`worker/index.js`). |
+| Página web | Cloudflare Workers | Archivos estáticos + un Worker pequeño para las fotos. Se recompila sola con cada cambio en `main`. |
+| Base de datos | Supabase, plan gratuito, región Virginia (EE. UU.) | Fichas, búsquedas, historial de cambios. Protegida con RLS. |
+| Fotos | Cloudflare R2, bucket `huellas-fotos` | Las sube y sirve [`worker/index.js`](worker/index.js). 10 GB gratis, salida sin costo. |
+| Pruebas (staging) | Segundo proyecto de Supabase con el mismo esquema | Cada *pull request* se prueba contra esta base, nunca contra la real. |
+| Respaldos | Repositorio privado `huellas-a-casa-respaldos`, copia cada noche | Privado porque incluyen contactos de particulares. |
 | Código | Este repositorio, público | Cualquiera puede revisar qué hace la página con los datos. |
-| Respaldos | Repositorio privado `huellas-a-casa-respaldos`, copia cada noche | Privado porque los respaldos incluyen contactos de particulares. |
 
-Cambios: siempre por *pull request* a `main`, con verificación automática de que compila. La rama `main` está protegida.
+**Datos personales**: qué se guarda, quién lo ve y cómo pedir corrección o
+retiro está explicado en la propia página (inicio, «Tus datos»). Se tratan
+según la Ley 1581 de 2012. Los contactos de quien cuida un animal se
+publican en la ficha (la persona elige WhatsApp, correo o Instagram); los de
+quien busca a su mascota solo los ven voluntarios.
 
-Esta iniciativa es temporal. Cómo y cuándo se cierra y se borran los datos: [CIERRE.md](CIERRE.md).
+**Nada se borra**: no hay `DELETE` en la aplicación ni permiso de borrado en
+Postgres. Marcar reencontrado cambia un estado; retirar una ficha la oculta.
+Cada cambio queda en la tabla `historial`.
 
-Datos personales: qué se guarda, quién lo ve y cómo pedir corrección o retiro está explicado en la propia página (pantalla de inicio, «Tus datos»). Se tratan según la Ley 1581 de 2012.
+---
 
-## Nada se borra
+## Cómo se trabaja en este repositorio
 
-No hay `DELETE` en toda la aplicación. Marcar como reencontrado cambia un campo de estado; retirar una ficha la oculta. Además el permiso de borrado está revocado a nivel de Postgres, así que ni un error de código puede borrar. Cada cambio queda en la tabla `historial`.
+- Todo cambio va en una rama con nombre de la necesidad y entra a `main` por
+  *pull request*. `main` está protegida: exige que compile (CI) y una
+  aprobación de un administrador ([`.github/CODEOWNERS`](.github/CODEOWNERS)).
+- Cada PR recibe una **URL de vista previa** de Cloudflare conectada a la base
+  de **staging** (franja morada «ENTORNO DE PRUEBAS»). Producción solo cambia
+  al mergear.
+- Los cambios de esquema van como archivos en
+  [`supabase/migrations/`](supabase/migrations/), se aplican **primero en
+  staging**, se prueban en la vista previa, y solo después en producción.
+- Guía completa de montaje y operación: [**DESPLIEGUE.md**](DESPLIEGUE.md).
+
+### Correr en local
+
+```bash
+npm install
+npm run dev              # la página, contra la base de producción (.env.production)
+npx wrangler dev         # en otra terminal, si necesitas subir fotos
+```
+
+Para trabajar contra staging en local: `cp .env.staging .env.local`.
+
+### Workflows automáticos
+
+| Workflow | Cuándo | Qué hace |
+|---|---|---|
+| `verificar.yml` | cada PR | Comprueba que compila. No publica nada. |
+| `respaldo.yml` | cada noche, 2 a.m. | `pg_dump` completo al repositorio privado. 30 diarios + 1 mensual permanente. |
+| `mantener-activo.yml` | cada día | Consulta la base para que Supabase no pause el proyecto por inactividad. |
+
+Si alguno falla, GitHub avisa por correo a los administradores.
 
 ---
 
@@ -130,15 +135,18 @@ Para cambiar una contraseña: Authentication → Users → ⋯ → Reset passwor
 | Fotos | Cloudflare R2 | 10 GB, salida gratis | ~45.000 mascotas. Ver fotos no gasta cuota. |
 | Peticiones del Worker | Cloudflare | 100.000 al día | Cada foto vista es una petición: alcanza para varios miles de visitas diarias. |
 
-Aun así [`src/lib/foto.js`](src/lib/foto.js) comprime a ~200 KB y guarda una miniatura de 320px aparte: el listado usa la miniatura, la grande solo se carga al abrir la ficha. Menos datos móviles para quien busca.
+[`src/lib/foto.js`](src/lib/foto.js) comprime a ~200 KB y guarda una miniatura
+de 320 px aparte: el listado usa la miniatura, la grande solo se carga al
+abrir la ficha. Menos datos móviles para quien busca.
 
-## Antes de abrir al público
+---
 
-Dos decisiones que no son técnicas pero pesan más que el código:
+## Pendientes
 
-**Los teléfonos quedan públicos en internet**, indexables por Google, permanentes. No es un grupo de WhatsApp. Considera que el botón escriba al grupo de voluntarios en vez de mostrar el número de cada persona.
-
-**Definan el protocolo de entrega** antes de que llegue el primer reclamo: qué prueba pide un refugio para entregar un animal. Con mascotas de raza y en emergencia aparecen reclamos falsos.
+- Recuperación de contraseña desde la página (hoy la restablece un administrador).
+- Cruce inverso: mascota nueva contra búsquedas abiertas (`busquedasParecidas()` ya existe).
+- Migraciones automáticas desde CI (staging al abrir PR, producción al mergear).
+- **Protocolo de entrega**: qué prueba pide un refugio antes de entregar un animal. Lo define el refugio, no el código.
 
 ---
 
@@ -147,8 +155,11 @@ Dos decisiones que no son técnicas pero pesan más que el código:
 ```
 src/lib/catalogo.js      Vocabulario cerrado del formulario
 src/lib/conceptos.js     Diccionario de sinónimos  ← editable por cualquiera
-src/lib/coincidencia.js  Motor de puntaje
-src/lib/foto.js          Compresión y subida
+src/lib/coincidencia.js  Motor de puntaje, duplicados y gemelas
+src/lib/foto.js          Compresión y subida de fotos
 src/App.jsx              Interfaz
+worker/index.js          Worker de Cloudflare: fotos en R2
+scripts/build.mjs        Elige producción o staging según la rama
 supabase/migrations/     Esquema (tablas, RLS, auditoría) y migraciones, en orden
+.github/workflows/       CI, respaldo nocturno, anti-pausa
 ```
