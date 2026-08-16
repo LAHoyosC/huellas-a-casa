@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { supabase, configurado } from "./lib/supabase.js";
 import { subirFoto, comprimir } from "./lib/foto.js";
+import { entrar, salir, sesionActual, alCambiarSesion } from "./lib/sesion.js";
 import { buscarCoincidencias, posiblesDuplicados, fichasGemelas, empatadosArriba } from "./lib/coincidencia.js";
 import { extraerConceptos, etiquetaDe } from "./lib/conceptos.js";
 import {
@@ -59,6 +60,58 @@ function CampoContacto({ medio, valor, onMedio, onValor, placeholderNombre }) {
   );
 }
 
+const botonSecundario = (color) => ({
+  background: "transparent", border: `1.5px solid ${color === T.verde ? T.verde : T.linea}`,
+  color, padding: "9px 13px", borderRadius: 8, fontSize: 13.5, fontWeight: 600, cursor: "pointer",
+});
+
+function Entrar({ onListo }) {
+  const [correo, setCorreo] = useState("");
+  const [clave, setClave] = useState("");
+  const [error, setError] = useState("");
+  const [cargando, setCargando] = useState(false);
+
+  async function enviar(e) {
+    e.preventDefault();
+    setError("");
+    if (!correo || !clave) { setError("Escribe el correo y la contraseña."); return; }
+    setCargando(true);
+    try {
+      await entrar(correo, clave);
+      onListo();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={enviar} style={{
+      border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco,
+      padding: "24px 24px", maxWidth: 460,
+    }}>
+      <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: ".12em", color: T.verde }}>VOLUNTARIOS</div>
+      <h2 style={{ margin: "8px 0 6px", fontSize: 22, fontWeight: 720, letterSpacing: "-.02em" }}>Iniciar sesión</h2>
+      <p style={{ margin: "0 0 18px", fontSize: 14.5, color: T.tintaSuave, lineHeight: 1.5 }}>
+        Solo para quienes aprueban fichas y confirman reencuentros. Si no tienes cuenta,
+        pídela en el grupo de voluntarios.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <input style={entradaTexto} type="email" autoComplete="username" placeholder="Correo"
+          value={correo} onChange={(e) => setCorreo(e.target.value)} />
+        <input style={entradaTexto} type="password" autoComplete="current-password" placeholder="Contraseña"
+          value={clave} onChange={(e) => setClave(e.target.value)} />
+      </div>
+      {error && <p style={{ margin: "10px 0 0", fontSize: 14, color: T.rojo }}>{error}</p>}
+      <button type="submit" disabled={cargando} style={{
+        marginTop: 16, background: cargando ? T.tintaSuave : T.verde, color: T.blanco, border: "none",
+        borderRadius: 9, padding: "12px 20px", fontSize: 15, fontWeight: 660, cursor: cargando ? "wait" : "pointer",
+      }}>{cargando ? "Entrando…" : "Entrar"}</button>
+    </form>
+  );
+}
+
 /* ------------------------------ PIEZAS ----------------------------- */
 
 function Opcion({ activo, onClick, children, muestra }) {
@@ -109,7 +162,7 @@ function Sello({ valor }) {
   );
 }
 
-function Ficha({ r, resultado, nombres, onReencontrar }) {
+function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, onOcultar }) {
   const reencontrado = r.estado === "reencontrado";
   const senas = r.senas || [];
   return (
@@ -239,16 +292,21 @@ function Ficha({ r, resultado, nombres, onReencontrar }) {
                     textDecoration: "none", padding: "9px 13px", borderRadius: 8, fontSize: 13.5, fontWeight: 600,
                   }}>Cómo llegar</a>
                 )}
-                <button
-                  type="button" onClick={() => onReencontrar(r)}
-                  style={{
-                    background: "transparent", border: `1.5px solid ${T.linea}`,
-                    color: T.tintaSuave, padding: "9px 13px", borderRadius: 8,
-                    fontSize: 13.5, fontWeight: 560, cursor: "pointer",
-                  }}
-                >
-                  Marcar como reencontrado
-                </button>
+                {voluntario && (
+                  <>
+                    {!r.verificado && (
+                      <button type="button" onClick={() => onAprobar(r)} style={botonSecundario(T.verde)}>
+                        Aprobar ficha
+                      </button>
+                    )}
+                    <button type="button" onClick={() => onReencontrar(r)} style={botonSecundario(T.tintaSuave)}>
+                      Marcar como reencontrado
+                    </button>
+                    <button type="button" onClick={() => onOcultar(r)} style={botonSecundario(T.tintaSuave)}>
+                      Ocultar
+                    </button>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -499,6 +557,8 @@ export default function App() {
   const [duplicados, setDuplicados] = useState(null);
   const [avisoFoto, setAvisoFoto] = useState("");
   const [mostrarMapa, setMostrarMapa] = useState(false);
+  const [sesion, setSesion] = useState(null);
+  const voluntario = sesion?.voluntario || null;
 
   const [filtroEspecie, setFiltroEspecie] = useState("");
   const [filtroMuni, setFiltroMuni] = useState("");
@@ -522,6 +582,10 @@ export default function App() {
   }
 
   useEffect(() => { cargar(); }, []);
+  useEffect(() => {
+    sesionActual().then(setSesion);
+    return alCambiarSesion(setSesion);
+  }, []);
 
   const enResguardo = registros.filter((r) => r.estado === "resguardo").length;
   const reencontrados = registros.filter((r) => r.estado === "reencontrado").length;
@@ -546,6 +610,19 @@ export default function App() {
       return;
     }
     setRegistros((p) => p.map((x) => (x.id === r.id ? { ...x, estado: "reencontrado" } : x)));
+  }
+
+  async function aprobar(r) {
+    const { error } = await supabase.from("mascotas").update({ verificado: true }).eq("id", r.id);
+    if (error) { alert("No se pudo aprobar. ¿Tu cuenta está activada como voluntario?"); return; }
+    setRegistros((p) => p.map((x) => (x.id === r.id ? { ...x, verificado: true } : x)));
+  }
+
+  async function ocultar(r) {
+    if (!confirm(`¿Ocultar la ficha ${r.codigo} del listado? No se borra: queda guardada y se puede volver a mostrar desde la base.`)) return;
+    const { error } = await supabase.from("mascotas").update({ estado: "oculto" }).eq("id", r.id);
+    if (error) { alert("No se pudo ocultar. ¿Tu cuenta está activada como voluntario?"); return; }
+    setRegistros((p) => p.filter((x) => x.id !== r.id));
   }
 
   function buscar() {
@@ -655,8 +732,27 @@ export default function App() {
       )}
       <header style={{ borderBottom: `1px solid ${T.linea}`, background: T.blanco }}>
         <div style={{ maxWidth: 940, margin: "0 auto", padding: "20px 20px 18px" }}>
-          <div style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".18em", color: T.tintaSuave }}>
-            EJE CAFETERO · RISARALDA · QUINDÍO · CALDAS · VALLE
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".18em", color: T.tintaSuave }}>
+              EJE CAFETERO · RISARALDA · QUINDÍO · CALDAS · VALLE
+            </div>
+            <div style={{ fontSize: 13, color: T.tintaSuave }}>
+              {sesion ? (
+                <>
+                  {voluntario ? `Hola, ${voluntario.nombre || sesion.correo}` : sesion.correo}
+                  {" · "}
+                  <button type="button" onClick={async () => { await salir(); setSesion(null); }}
+                    style={{ background: "none", border: "none", padding: 0, color: T.verde, cursor: "pointer", fontSize: 13, textDecoration: "underline" }}>
+                    Salir
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={() => setModo("entrar")}
+                  style={{ background: "none", border: "none", padding: 0, color: T.tintaSuave, cursor: "pointer", fontSize: 13, textDecoration: "underline" }}>
+                  Voluntarios
+                </button>
+              )}
+            </div>
           </div>
           <h1 style={{ margin: "6px 0 0", fontSize: 31, fontWeight: 760, letterSpacing: "-.03em", lineHeight: 1.05 }}>
             Huellas a Casa
@@ -697,6 +793,21 @@ export default function App() {
           </div>
         )}
 
+        {modo === "entrar" && !sesion && <Entrar onListo={() => setModo("lista")} />}
+        {modo === "entrar" && sesion && (
+          <div style={{ border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco, padding: "22px 24px", fontSize: 15, lineHeight: 1.6 }}>
+            Ya tienes la sesión iniciada. Ve a <a href="#" onClick={(e) => { e.preventDefault(); setModo("lista"); }} style={{ color: T.verde }}>Ver todos los registros</a>.
+          </div>
+        )}
+        {sesion && !voluntario && modo !== "entrar" && (
+          <div style={{
+            border: `1.5px solid ${T.ambar}`, background: T.ambarClaro, borderRadius: 11,
+            padding: "12px 15px", marginBottom: 18, fontSize: 14.5, lineHeight: 1.5,
+          }}>
+            Tu cuenta ({sesion.correo}) todavía no está activada como voluntario. Pídele a un
+            administrador que la active; mientras tanto puedes usar la página como cualquier persona.
+          </div>
+        )}
         {modo === "inicio" && (
           <div style={{
             border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco,
@@ -793,7 +904,7 @@ export default function App() {
                 <div style={{ display: "grid", gap: 14 }}>
                   {resultados.map(({ ficha, resultado }) => (
                     <Ficha key={ficha.id} r={ficha} resultado={resultado}
-                      nombres={busqueda.nombres} onReencontrar={marcarReencontrado} />
+                      nombres={busqueda.nombres} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} />
                   ))}
                 </div>
               </>
@@ -905,7 +1016,7 @@ export default function App() {
                 </p>
                 <div style={{ display: "grid", gap: 12 }}>
                   {duplicados.map(({ ficha, resultado }) => (
-                    <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={null} onReencontrar={marcarReencontrado} />
+                    <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} />
                   ))}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
@@ -960,7 +1071,7 @@ export default function App() {
             <div style={{ display: "grid", gap: 14 }}>
               {cargando && <p style={{ color: T.tintaSuave, fontSize: 15 }}>Cargando fichas…</p>}
               {!cargando && listaFiltrada.map((r) => (
-                <Ficha key={r.id} r={r} resultado={null} nombres={null} onReencontrar={marcarReencontrado} />
+                <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} />
               ))}
               {!cargando && listaFiltrada.length === 0 && (
                 <div style={{
