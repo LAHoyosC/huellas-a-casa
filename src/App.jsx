@@ -4,9 +4,10 @@ import { subirFoto, comprimir } from "./lib/foto.js";
 import { entrar, salir, sesionActual, alCambiarSesion, pedirRecuperacion, cambiarClave, llegoParaRecuperar } from "./lib/sesion.js";
 import { buscarCoincidencias, posiblesDuplicados, fichasGemelas, empatadosArriba } from "./lib/coincidencia.js";
 import { extraerConceptos, etiquetaDe } from "./lib/conceptos.js";
+import { sugerirDesdeNota } from "./lib/sugerencias.js";
 import {
   ESPECIE, TAMANO, TAMANO_PISTA, COLOR, COLOR_MUESTRA, PELO, SEXO, EDAD,
-  OREJAS, COLA, SENAS, COLOR_COLLAR, CUSTODIO, MUNICIPIOS,
+  OREJAS, COLA, SENAS, COLOR_COLLAR, CUSTODIO, MUNICIPIOS, RAZA, RAZA_INDEFINIDA,
 } from "./lib/catalogo.js";
 
 const T = {
@@ -16,9 +17,33 @@ const T = {
   rojo: "#B03A28", blanco: "#FFFFFF",
 };
 
-// Canal para pedir correccion o retiro de datos personales. CAMBIAR por
-// el correo o WhatsApp real del grupo de voluntarios antes de difundir.
+// Contacto del grupo de voluntarios: dudas, correcciones y retiro de datos.
 const CONTACTO_DATOS = "huellasacasa.eje@gmail.com";
+const CONTACTO_CELULAR = "+57 301 8009036";
+const CONTACTO_WHATSAPP = `https://wa.me/${CONTACTO_CELULAR.replace(/\D/g, "")}`;
+
+// Enlace publico de una ficha. El Worker (worker/index.js) responde en
+// esta ruta con la foto y los datos del animal en las etiquetas de
+// vista previa, para que al compartir por WhatsApp salga la imagen.
+function enlaceFicha(codigo) {
+  return `${window.location.origin}/m/${encodeURIComponent(codigo)}`;
+}
+
+function textoParaCompartir(r) {
+  const raza = r.raza && !RAZA_INDEFINIDA.includes(r.raza) ? ` (${r.raza})` : "";
+  const que = `${r.especie} ${r.tamano?.toLowerCase() || ""} ${r.color?.toLowerCase() || ""}${raza}`.replace(/\s+/g, " ").trim();
+  const donde = [r.barrio, r.municipio].filter(Boolean).join(", ");
+  return `${que} encontrado en ${donde}. ¿Lo reconoces? Ficha ${r.codigo}:`;
+}
+
+async function compartirFicha(r) {
+  const url = enlaceFicha(r.codigo);
+  const texto = textoParaCompartir(r);
+  if (navigator.share) {
+    try { await navigator.share({ title: `Huellas a Casa — ${r.codigo}`, text: texto, url }); return; } catch { /* cancelado */ return; }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(`${texto} ${url}`)}`, "_blank", "noopener");
+}
 
 const FUENTE = `ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
 const MONO = `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
@@ -219,14 +244,14 @@ function Dato({ etiqueta, valor }) {
   );
 }
 
-function enlaceFicha(codigo) {
-  return `${window.location.origin}${window.location.pathname}#${codigo}`;
-}
-
 function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar, onEditar }) {
   const [copiado, setCopiado] = useState(false);
   const reencontrado = r.estado === "reencontrado";
   const senas = r.senas || [];
+  // Misma regla que en la tarjeta: foto borrosa al publico hasta que un
+  // voluntario apruebe la ficha (control de imagenes).
+  const [fotoDestapada, setFotoDestapada] = useState(false);
+  const fotoBorrosa = !r.verificado && !voluntario && !fotoDestapada;
 
   useEffect(() => {
     const tecla = (e) => { if (e.key === "Escape") onCerrar(); };
@@ -237,7 +262,7 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar,
 
   async function compartir() {
     const url = enlaceFicha(r.codigo);
-    const texto = `${r.especie} ${r.tamano?.toLowerCase() || ""} ${r.color?.toLowerCase() || ""} en ${r.municipio} — ficha ${r.codigo}`;
+    const texto = textoParaCompartir(r);
     if (navigator.share) {
       try { await navigator.share({ title: `Huellas a Casa · ${r.codigo}`, text: texto, url }); return; } catch { /* cancelado */ }
     }
@@ -255,8 +280,19 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar,
       }}>
         <div style={{ position: "relative", background: T.papelHondo }}>
           {r.foto_url || r.foto_thumb_url ? (
-            <img src={r.foto_url || r.foto_thumb_url} alt=""
-              style={{ width: "100%", maxHeight: "70vh", objectFit: "contain", display: "block", background: "#111" }} />
+            <div style={{ position: "relative", overflow: "hidden" }}>
+              <img src={r.foto_url || r.foto_thumb_url} alt=""
+                style={{
+                  width: "100%", maxHeight: "70vh", objectFit: "contain", display: "block", background: "#111",
+                  filter: fotoBorrosa ? "blur(22px)" : "none", transform: fotoBorrosa ? "scale(1.1)" : "none",
+                }} />
+              {fotoBorrosa && (
+                <button type="button" onClick={() => setFotoDestapada(true)} style={{
+                  position: "absolute", inset: 0, background: "rgba(27,32,41,.35)", border: "none",
+                  color: T.blanco, cursor: "pointer", fontSize: 14, fontWeight: 620, lineHeight: 1.4, fontFamily: FUENTE,
+                }}>Foto sin revisar por un voluntario<br />Toca para verla</button>
+              )}
+            </div>
           ) : (
             <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", color: "#B9B2A6", fontFamily: MONO, fontSize: 12 }}>SIN FOTO</div>
           )}
@@ -387,9 +423,15 @@ function Sello({ valor }) {
   );
 }
 
-function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, onOcultar, onVer }) {
+function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, onOcultar, onMostrar, onVer }) {
   const reencontrado = r.estado === "reencontrado";
+  const oculta = r.estado === "oculto";
   const senas = r.senas || [];
+  // Control de imagenes: hasta que un voluntario apruebe la ficha, la foto
+  // se muestra borrosa al publico (quien quiera la destapa tocandola). Asi
+  // una imagen indebida no queda al aire sin que nadie la haya visto.
+  const [fotoDestapada, setFotoDestapada] = useState(false);
+  const fotoBorrosa = !r.verificado && !voluntario && !fotoDestapada;
   return (
     <article style={{
       background: T.blanco, border: `1px solid ${T.linea}`,
@@ -400,8 +442,20 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
         <div style={{ width: 116, flexShrink: 0, borderRight: `1px solid ${T.linea}`, cursor: onVer ? "pointer" : "default" }}
           onClick={() => onVer && onVer(r)} title="Ver ficha completa">
           {r.foto_thumb_url ? (
-            <img src={r.foto_thumb_url} alt="" loading="lazy"
-              style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", display: "block" }} />
+            <div style={{ position: "relative", overflow: "hidden" }}>
+              <img src={r.foto_thumb_url} alt="" loading="lazy"
+                style={{
+                  width: "100%", aspectRatio: "1/1", objectFit: "cover", display: "block",
+                  filter: fotoBorrosa ? "blur(14px)" : "none", transform: fotoBorrosa ? "scale(1.15)" : "none",
+                }} />
+              {fotoBorrosa && (
+                <button type="button" onClick={() => setFotoDestapada(true)} title="La foto aún no la revisa un voluntario. Toca para verla." style={{
+                  position: "absolute", inset: 0, background: "rgba(27,32,41,.35)", border: "none",
+                  color: T.blanco, cursor: "pointer", fontSize: 11, fontWeight: 620, lineHeight: 1.3,
+                  padding: 6, fontFamily: FUENTE,
+                }}>Foto sin revisar<br />toca para ver</button>
+              )}
+            </div>
           ) : (
             <div style={{
               width: "100%", aspectRatio: "1/1", background: T.papelHondo, display: "flex",
@@ -416,12 +470,16 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: MONO, fontSize: 11, color: T.tintaSuave }}>
                 {r.codigo}
+                {oculta && (
+                  <span style={{ marginLeft: 8, color: T.rojo }}>OCULTA</span>
+                )}
                 {!r.verificado && (
                   <span style={{ marginLeft: 8, color: T.ambar }}>SIN VERIFICAR</span>
                 )}
               </div>
               <h4 style={{ margin: "2px 0 0", fontSize: 17, fontWeight: 700, letterSpacing: "-.015em" }}>
                 {r.especie} {r.tamano?.toLowerCase()}, {r.color?.toLowerCase()}
+                {r.raza && !RAZA_INDEFINIDA.includes(r.raza) ? ` · ${r.raza}` : ""}
               </h4>
               <div style={{ fontSize: 13.5, color: T.tintaSuave, marginTop: 3 }}>
                 {r.sexo !== "No sé" ? r.sexo : "Sexo sin confirmar"} · {r.edad} · pelo {r.pelo?.toLowerCase()}
@@ -531,7 +589,15 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
                     textDecoration: "none", padding: "9px 13px", borderRadius: 8, fontSize: 13.5, fontWeight: 600,
                   }}>Cómo llegar</a>
                 )}
-                {voluntario && (
+                <button type="button" onClick={() => compartirFicha(r)} style={botonSecundario(T.verde)}>
+                  Compartir
+                </button>
+                {voluntario && oculta && (
+                  <button type="button" onClick={() => onMostrar(r)} style={botonSecundario(T.verde)}>
+                    Volver a mostrar
+                  </button>
+                )}
+                {voluntario && !oculta && (
                   <>
                     {!r.verificado && (
                       <button type="button" onClick={() => onAprobar(r)} style={botonSecundario(T.verde)}>
@@ -577,6 +643,16 @@ function Aviso() {
         la información de las mascotas perdidas y encontradas quede en un solo lugar y no regada en
         publicaciones sueltas. No somos una empresa ni una entidad oficial: es una herramienta
         comunitaria sostenida por gente que dona su tiempo.
+      </Bloque>
+
+      <Bloque titulo="CONTACTO">
+        Para dudas, correcciones o para vincular tu refugio:
+        <ul style={{ margin: "6px 0 0", paddingLeft: 20 }}>
+          <li>WhatsApp:{" "}
+            <a href={CONTACTO_WHATSAPP} target="_blank" rel="noreferrer" style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_CELULAR}</a></li>
+          <li>Correo:{" "}
+            <a href={`mailto:${CONTACTO_DATOS}`} style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_DATOS}</a></li>
+        </ul>
       </Bloque>
 
       <Bloque titulo="ESTO ES GRATUITO">
@@ -677,8 +753,15 @@ function CargarFoto({ archivo, onArchivo, actual }) {
   );
 }
 
-function NotaLibre({ valor, onCambio, numero, titulo, ayuda, placeholder }) {
+function NotaLibre({ valor, onCambio, numero, titulo, ayuda, placeholder, registro, set }) {
   const detectados = extraerConceptos(valor);
+  // Lo que la nota sugiere marcar en las casillas. Se propone, no se marca:
+  // la persona confirma con un toque (asi la evidencia queda donde cruza).
+  const sugerencias = registro && set ? sugerirDesdeNota(valor, registro) : [];
+  const aplicar = (sg) => {
+    if (sg.campo === "senas") set("senas", [...(registro.senas || []), sg.valor]);
+    else set(sg.campo, sg.valor);
+  };
   return (
     <div style={{ marginBottom: 26 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 3, flexWrap: "wrap" }}>
@@ -696,6 +779,24 @@ function NotaLibre({ valor, onCambio, numero, titulo, ayuda, placeholder }) {
         <div style={{ fontSize: 12, color: T.tintaSuave, marginTop: 4, fontFamily: MONO }}>
           {(valor || "").length}/180
         </div>
+        {sugerencias.length > 0 && (
+          <div style={{ marginTop: 10, padding: "10px 12px", background: T.verdeClaro, borderRadius: 9, maxWidth: 420 }}>
+            <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: ".1em", color: T.verde, marginBottom: 6 }}>
+              POR LO QUE ESCRIBISTE, ¿MARCAMOS ESTO?
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {sugerencias.map((sg) => (
+                <button key={`${sg.campo}-${sg.valor}`} type="button" onClick={() => aplicar(sg)} style={{
+                  fontSize: 12.5, padding: "5px 10px", borderRadius: 20, cursor: "pointer",
+                  background: T.blanco, color: T.verde, fontWeight: 620, border: `1.5px solid ${T.verde}`,
+                }}>+ {sg.texto}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: T.tintaSuave, marginTop: 6 }}>
+              Toca para marcarlo arriba. Si no es así, ignóralo.
+            </div>
+          </div>
+        )}
         {detectados.length > 0 && (
           <div style={{ marginTop: 10, padding: "10px 12px", background: T.ambarClaro, borderRadius: 9, maxWidth: 420 }}>
             <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: ".1em", color: "#8A5A12", marginBottom: 6 }}>
@@ -727,6 +828,11 @@ function Rasgos({ v, set, desde = 1 }) {
       <Campo numero={n(0)} titulo="¿Qué animal es?">
         {ESPECIE.map((o) => <Opcion key={o} activo={v.especie === o} onClick={() => set("especie", o)}>{o}</Opcion>)}
       </Campo>
+      {v.especie === "Perro" && (
+        <Campo numero={`${n(0)}b`} titulo="Raza" ayuda="Si no estás seguro, elige criollo o déjalo en blanco. Cuando se sabe, es lo que más ayuda a distinguirlo." opcional>
+          {RAZA.map((o) => <Opcion key={o} activo={v.raza === o} onClick={() => set("raza", v.raza === o ? undefined : o)}>{o}</Opcion>)}
+        </Campo>
+      )}
       <Campo numero={n(1)} titulo="Tamaño">
         {TAMANO.map((o) => (
           <Opcion key={o} activo={v.tamano === o} onClick={() => set("tamano", o)}>
@@ -829,43 +935,49 @@ export default function App() {
   }
   const detalle = detalleId ? registros.find((x) => x.id === detalleId) : null;
 
-  const verFicha = (r) => { setDetalleId(r.id); history.replaceState(null, "", `#${r.codigo}`); };
-  const cerrarFicha = () => { setDetalleId(null); history.replaceState(null, "", window.location.pathname + window.location.search); };
+  // La ficha abierta se refleja en la ruta (/m/PER-0012): es el enlace que se
+  // comparte, y el Worker responde ahi con la foto en la vista previa.
+  const verFicha = (r) => { setDetalleId(r.id); history.replaceState(null, "", `/m/${encodeURIComponent(r.codigo)}`); };
+  const cerrarFicha = () => { setDetalleId(null); history.replaceState(null, "", "/"); };
   const [mostrarMapa, setMostrarMapa] = useState(false);
   const [sesion, setSesion] = useState(null);
   const voluntario = sesion?.voluntario || null;
 
   const [filtroEspecie, setFiltroEspecie] = useState("");
   const [filtroMuni, setFiltroMuni] = useState("");
+  const [verOcultas, setVerOcultas] = useState(false);
 
   const setB = (k, v) => setBusqueda((p) => ({ ...p, [k]: v }));
   const setR = (k, v) => setReporte((p) => ({ ...p, [k]: v }));
 
   async function cargar() {
     setCargando(true);
-    const { data, error } = await supabase
-      .from("mascotas")
-      .select("*")
-      .neq("estado", "oculto")
-      .order("creado_en", { ascending: false })
-      .limit(1000);
+    // Las ocultas solo las devuelve la base a voluntarios con sesion (RLS);
+    // para el publico esta condicion es redundante, pero deja claro el intento.
+    // Los voluntarios las reciben para poder revisarlas y volver a mostrarlas.
+    let consulta = supabase.from("mascotas").select("*");
+    if (!voluntario) consulta = consulta.neq("estado", "oculto");
+    const { data, error } = await consulta.order("creado_en", { ascending: false }).limit(1000);
 
     if (!configurado) setErrorCarga("La página no tiene configurada la conexión a la base de datos. Avisa a quien administra el sitio.");
     else if (error) setErrorCarga("No se pudo cargar el listado. Revisa tu conexión y vuelve a intentar.");
     else {
       setRegistros(data || []);
       setErrorCarga("");
-      // Enlace directo a una ficha: .../#PER-0002
-      const codigo = decodeURIComponent(window.location.hash.slice(1));
-      if (codigo) {
+      // Enlace directo a una ficha: /m/PER-0002 (o #PER-0002, enlaces viejos).
+      const porRuta = window.location.pathname.match(/^\/m\/([^/]+)\/?$/);
+      const codigo = decodeURIComponent(porRuta ? porRuta[1] : window.location.hash.slice(1));
+      if (codigo && !detalleId) {
         const f = (data || []).find((x) => x.codigo === codigo);
         if (f) { setDetalleId(f.id); setModo("lista"); }
+        else if (porRuta) setErrorCarga(`No encontramos la ficha ${codigo}. Puede que ya no esté publicada.`);
       }
     }
     setCargando(false);
   }
 
-  useEffect(() => { cargar(); }, []);
+  // Se recarga al entrar o salir un voluntario: cambia lo que la base le deja ver.
+  useEffect(() => { cargar(); }, [voluntario?.id]);
   useEffect(() => {
     sesionActual().then(setSesion);
     return alCambiarSesion(setSesion);
@@ -873,6 +985,7 @@ export default function App() {
 
   const enResguardo = registros.filter((r) => r.estado === "resguardo").length;
   const reencontrados = registros.filter((r) => r.estado === "reencontrado").length;
+  const ocultas = registros.filter((r) => r.estado === "oculto").length;
 
   async function marcarReencontrado(r) {
     // Antes de dar de alta, avisar si hay otros animales en resguardo que
@@ -906,7 +1019,13 @@ export default function App() {
     if (!confirm(`¿Ocultar la ficha ${r.codigo} del listado? No se borra: queda guardada y se puede volver a mostrar desde la base.`)) return;
     const { error } = await supabase.from("mascotas").update({ estado: "oculto" }).eq("id", r.id);
     if (error) { alert("No se pudo ocultar. ¿Tu cuenta está activada como voluntario?"); return; }
-    setRegistros((p) => p.filter((x) => x.id !== r.id));
+    setRegistros((p) => p.map((x) => (x.id === r.id ? { ...x, estado: "oculto" } : x)));
+  }
+
+  async function mostrarDeNuevo(r) {
+    const { error } = await supabase.from("mascotas").update({ estado: "resguardo" }).eq("id", r.id);
+    if (error) { alert("No se pudo volver a mostrar. ¿Tu cuenta está activada como voluntario?"); return; }
+    setRegistros((p) => p.map((x) => (x.id === r.id ? { ...x, estado: "resguardo" } : x)));
   }
 
   function buscar() {
@@ -1024,19 +1143,23 @@ export default function App() {
 
   const listaFiltrada = useMemo(
     () => registros.filter((r) =>
+      (verOcultas ? r.estado === "oculto" : r.estado !== "oculto") &&
       (!filtroEspecie || r.especie === filtroEspecie) &&
       (!filtroMuni || r.municipio === filtroMuni)),
-    [registros, filtroEspecie, filtroMuni]
+    [registros, filtroEspecie, filtroMuni, verOcultas]
   );
 
   const municipiosConRegistro = useMemo(
-    () => [...new Set(registros.map((r) => r.municipio))].sort(), [registros]
+    () => [...new Set(registros.filter((r) => r.estado !== "oculto").map((r) => r.municipio))].sort(), [registros]
   );
 
   const btnModo = (id, etiqueta, sub) => (
     <button
       type="button"
-      onClick={() => { setModo(id); setResultados(null); setGuardado(null); setErrorGuardar(""); setDuplicados(null); }}
+      onClick={() => {
+        setModo(id); setResultados(null); setGuardado(null); setErrorGuardar(""); setDuplicados(null);
+        if (window.location.pathname !== "/") window.history.replaceState(null, "", "/");
+      }}
       style={{
         flex: 1, minWidth: 200, textAlign: "left", cursor: "pointer", padding: "18px 20px",
         borderRadius: 13, border: `1.5px solid ${modo === id ? T.verde : T.linea}`,
@@ -1085,7 +1208,10 @@ export default function App() {
           <h1 style={{ margin: "6px 0 0", fontSize: 31, fontWeight: 760, letterSpacing: "-.03em", lineHeight: 1.05 }}>
             Huellas a Casa
           </h1>
-          <p style={{ margin: "7px 0 0", fontSize: 15.5, color: T.tintaSuave, maxWidth: 560, lineHeight: 1.5 }}>
+          <p style={{ margin: "5px 0 0", fontSize: 18, fontWeight: 620, color: T.ambar, letterSpacing: "-.01em" }}>
+            Mascotas perdidas · terremoto 10 de agosto
+          </p>
+          <p style={{ margin: "6px 0 0", fontSize: 15.5, color: T.tintaSuave, maxWidth: 560, lineHeight: 1.5 }}>
             Un solo lugar para registrar y buscar las mascotas que quedaron sin su casa.
           </p>
           <div style={{ display: "flex", gap: 22, marginTop: 16, fontFamily: MONO, fontSize: 12.5 }}>
@@ -1105,7 +1231,7 @@ export default function App() {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 26 }}>
           {btnModo("buscar", "Busco a mi mascota", "Responde y te muestro los parecidos")}
           {btnModo("reportar", "Encontré una mascota", "Para refugios, hogares y voluntarios")}
-          {btnModo("lista", "Ver todos los registros", cargando ? "Cargando…" : `${registros.length} fichas`)}
+          {btnModo("lista", "Ver todos los registros", cargando ? "Cargando…" : `${registros.length - ocultas} fichas`)}
         </div>
 
         {errorCarga && (
@@ -1175,7 +1301,7 @@ export default function App() {
             <NotaLibre
               numero="11" titulo="Cuéntanos algo más de tu mascota"
               ayuda="Con tus palabras. No importa cómo lo escribas: entiendo lo mismo si dices cojea, renquea o camina mal."
-              valor={busqueda.nota} onCambio={(v) => setB("nota", v)}
+              valor={busqueda.nota} onCambio={(v) => setB("nota", v)} registro={busqueda} set={setB}
               placeholder="Ej.: renquea de una pata de atrás, tiene una manchita blanca en el pecho"
             />
 
@@ -1229,6 +1355,18 @@ export default function App() {
                   Ordenadas por parecido. El porcentaje viene de los datos, no de la foto: mira siempre
                   la imagen antes de escribir.
                 </p>
+                {resultados[0].resultado.confianza < 0.85 && (
+                  <div style={{
+                    border: `1px solid ${T.linea}`, background: T.blanco, borderRadius: 11,
+                    padding: "12px 15px", marginBottom: 16, fontSize: 14.5, lineHeight: 1.5,
+                  }}>
+                    <strong style={{ fontWeight: 660 }}>Respondiste pocas preguntas</strong>, así que el
+                    parecido no puede pasar de un nivel moderado. Si recuerdas la raza, el pelo, la edad o
+                    las orejas,{" "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); setResultados(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} style={{ color: T.verde }}>agrégalos</a>{" "}
+                    y la lista se afina.
+                  </div>
+                )}
                 {empatadosArriba(resultados).length > 1 && (
                   <div style={{
                     border: `1.5px solid ${T.ambar}`, background: T.ambarClaro, borderRadius: 11,
@@ -1242,7 +1380,7 @@ export default function App() {
                 <div style={{ display: "grid", gap: 14 }}>
                   {resultados.map(({ ficha, resultado }) => (
                     <Ficha key={ficha.id} r={ficha} resultado={resultado}
-                      nombres={busqueda.nombres} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onVer={verFicha} />
+                      nombres={busqueda.nombres} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
                   ))}
                 </div>
               </>
@@ -1342,7 +1480,7 @@ export default function App() {
             <NotaLibre
               numero="16" titulo="Qué observaste del animal"
               ayuda="Escríbelo como te salga. Sirve para cruzar con lo que cuente el tutor."
-              valor={reporte.nota} onCambio={(v) => setR("nota", v)}
+              valor={reporte.nota} onCambio={(v) => setR("nota", v)} registro={reporte} set={setR}
               placeholder="Ej.: muy asustadito, se esconde. Tiene el hocico canoso."
             />
 
@@ -1370,7 +1508,7 @@ export default function App() {
                 </p>
                 <div style={{ display: "grid", gap: 12 }}>
                   {duplicados.map(({ ficha, resultado }) => (
-                    <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onVer={verFicha} />
+                    <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
                   ))}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
@@ -1420,12 +1558,23 @@ export default function App() {
                 <option value="">Todos los municipios</option>
                 {municipiosConRegistro.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
+              {voluntario && (
+                <Opcion activo={verOcultas} onClick={() => setVerOcultas((v) => !v)}>
+                  Ocultas ({ocultas})
+                </Opcion>
+              )}
             </div>
+            {verOcultas && (
+              <p style={{ margin: "-6px 0 14px", fontSize: 13.5, color: T.tintaSuave, lineHeight: 1.5 }}>
+                Estas fichas solo las ven los voluntarios. El público no las encuentra ni en el listado, ni en la
+                búsqueda, ni por enlace compartido.
+              </p>
+            )}
 
             <div style={{ display: "grid", gap: 14 }}>
               {cargando && <p style={{ color: T.tintaSuave, fontSize: 15 }}>Cargando fichas…</p>}
               {!cargando && listaFiltrada.map((r) => (
-                <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onVer={verFicha} />
+                <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
               ))}
               {!cargando && listaFiltrada.length === 0 && (
                 <div style={{
@@ -1440,6 +1589,16 @@ export default function App() {
         )}
       </main>
 
+      <footer style={{ borderTop: `1px solid ${T.linea}`, background: T.blanco }}>
+        <div style={{
+          maxWidth: 940, margin: "0 auto", padding: "18px 20px 26px", fontSize: 14,
+          color: T.tintaSuave, lineHeight: 1.6, display: "flex", flexWrap: "wrap", gap: "6px 22px",
+        }}>
+          <span style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".12em", alignSelf: "center" }}>CONTACTO</span>
+          <a href={CONTACTO_WHATSAPP} target="_blank" rel="noreferrer" style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_CELULAR}</a>
+          <a href={`mailto:${CONTACTO_DATOS}`} style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_DATOS}</a>
+        </div>
+      </footer>
       {detalle && (
         <Detalle r={detalle} voluntario={voluntario} onCerrar={cerrarFicha}
           onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onEditar={editarFicha} />

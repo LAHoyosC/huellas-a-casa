@@ -139,24 +139,22 @@ export function normalizar(txt) {
 // "no cojea" no cuentan como presencia.
 export function extraerConceptos(nota) {
   const t = normalizar(nota);
-  const hallados = new Set();
+  return Object.keys(CONCEPTOS).filter((clave) => contiene(t, CONCEPTOS[clave].raices));
+}
 
-  for (const [clave, def] of Object.entries(CONCEPTOS)) {
-    for (const raiz of def.raices) {
-      let i = t.indexOf(raiz);
-      while (i !== -1) {
-        const antes = t.slice(Math.max(0, i - 16), i);
-        const negado = /\b(no|sin|nunca|tampoco|ni)\s+(\S+\s+)?$/.test(antes);
-        if (!negado) {
-          hallados.add(clave);
-          break;
-        }
-        i = t.indexOf(raiz, i + 1);
-      }
-      if (hallados.has(clave)) break;
+// ¿El texto ya normalizado contiene alguna de estas raices, sin estar
+// negada? Lo usan tambien las sugerencias (sugerencias.js).
+export function contiene(textoNormalizado, raices) {
+  for (const raiz of raices) {
+    let i = textoNormalizado.indexOf(raiz);
+    while (i !== -1) {
+      const antes = textoNormalizado.slice(Math.max(0, i - 16), i);
+      const negado = /\b(no|sin|nunca|tampoco|ni)\s+(\S+\s+)?$/.test(antes);
+      if (!negado) return true;
+      i = textoNormalizado.indexOf(raiz, i + 1);
     }
   }
-  return [...hallados];
+  return false;
 }
 
 // Conceptos de un registro completo: los de la nota mas los de las casillas.
