@@ -224,7 +224,7 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar,
               <a href={enlaceContacto(r.contacto_medio, r.contacto_telefono)} target="_blank" rel="noreferrer" style={{
                 background: T.verde, color: T.blanco, textDecoration: "none", padding: "10px 15px", borderRadius: 8, fontSize: 14.5, fontWeight: 640,
               }}>
-                Escribir a {r.contacto_nombre}{r.contacto_medio && r.contacto_medio !== "WhatsApp" ? ` por ${r.contacto_medio}` : ""}
+                {r.contacto_nombre ? `Escribir a ${r.contacto_nombre}` : "Escribir"} por {r.contacto_medio || "WhatsApp"}
               </a>
             )}
             {r.lugar_mapa && (
@@ -435,7 +435,7 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
                     padding: "9px 14px", borderRadius: 8, fontSize: 14, fontWeight: 640,
                   }}
                 >
-                  Escribir a {r.contacto_nombre}{r.contacto_medio && r.contacto_medio !== "WhatsApp" ? ` por ${r.contacto_medio}` : ""}
+                  {r.contacto_nombre ? `Escribir a ${r.contacto_nombre}` : "Escribir"} por {r.contacto_medio || "WhatsApp"}
                 </a>
                 {r.lugar_mapa && (
                   <a href={r.lugar_mapa} target="_blank" rel="noreferrer" style={{
@@ -517,11 +517,11 @@ function Aviso() {
       <Bloque titulo="TUS DATOS">
         <ul style={{ margin: 0, paddingLeft: 20 }}>
           <li><strong style={{ fontWeight: 660 }}>Qué guardamos:</strong> los rasgos y la foto del
-            animal, el municipio y barrio, y un nombre y un contacto (WhatsApp, correo o Instagram).</li>
+            animal, el municipio y barrio, y un contacto (WhatsApp, correo o Instagram).</li>
           <li><strong style={{ fontWeight: 660 }}>Para qué:</strong> únicamente para reunir animales
             con sus familias. No los usamos para nada más ni se los pasamos a nadie.</li>
-          <li><strong style={{ fontWeight: 660 }}>Quién los ve:</strong> el nombre y WhatsApp de
-            quien cuida un animal <em>se publican</em> en su ficha, para que el tutor pueda escribir.
+          <li><strong style={{ fontWeight: 660 }}>Quién los ve:</strong> el contacto de
+            quien cuida un animal <em>se publica</em> en su ficha, para que el tutor pueda escribir.
             El contacto de quien busca a su mascota <em>no se publica</em>: solo lo ven los
             voluntarios, para avisarle si llega algo parecido.</li>
           <li><strong style={{ fontWeight: 660 }}>Cuánto tiempo:</strong> esta es una iniciativa
@@ -830,7 +830,7 @@ export default function App() {
   }
 
   async function guardarReporte(ignorarDuplicados = false) {
-    const obligatorios = ["especie", "tamano", "color", "departamento", "municipio", "contacto_nombre", "contacto_telefono"];
+    const obligatorios = ["especie", "tamano", "color", "departamento", "municipio", "contacto_telefono"];
     const faltan = obligatorios.filter((k) => !reporte[k]);
     if (faltan.length) {
       setErrorGuardar("Faltan datos obligatorios. Revisa especie, tamaño, color, ubicación y contacto.");
@@ -1235,14 +1235,10 @@ export default function App() {
               </div>
             </Campo>
 
-            <Campo numero="15" titulo="Quién responde y por dónde"
-              ayuda="Este nombre y contacto se publican en la ficha para que el tutor escriba. Pon el del refugio o un número que puedas mostrar; no uses uno personal si no quieres que quede visible.">
-              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-                <input style={entradaTexto} value={reporte.contacto_nombre || ""}
-                  onChange={(e) => setR("contacto_nombre", e.target.value)} placeholder="Nombre de quien atiende" />
-                <CampoContacto medio={reporte.contacto_medio} valor={reporte.contacto_telefono}
-                  onMedio={(m) => setR("contacto_medio", m)} onValor={(v) => setR("contacto_telefono", v)} />
-              </div>
+            <Campo numero="15" titulo="Contacto para el tutor"
+              ayuda="Se publica en la ficha para que el tutor escriba. Pon el del refugio o uno que puedas mostrar; no uses uno personal si no quieres que quede visible.">
+              <CampoContacto medio={reporte.contacto_medio} valor={reporte.contacto_telefono}
+                onMedio={(m) => setR("contacto_medio", m)} onValor={(v) => setR("contacto_telefono", v)} />
             </Campo>
 
             <NotaLibre
@@ -1308,7 +1304,7 @@ export default function App() {
               cursor: guardando ? "wait" : "pointer", marginLeft: 25, marginTop: 6,
             }}>{guardando ? "Guardando…" : editando ? "Guardar cambios" : "Guardar ficha"}</button>
             <p style={{ margin: "12px 0 0 25px", fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
-              Al guardar, autorizas que el nombre y el contacto se publiquen en la ficha, solo para
+              Al guardar, autorizas que el contacto se publique en la ficha, solo para
               reunir al animal con su familia.{" "}
               <a href="#aviso" onClick={() => setModo("inicio")} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
