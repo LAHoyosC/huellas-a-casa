@@ -17,6 +17,7 @@ export const COLOR = [
   "Beige o crema",
   "Gris",
   "Naranja",
+  "Dorado",
   "Atigrado",
   "Tricolor",
   "Blanco con manchas",
@@ -29,6 +30,7 @@ export const COLOR_MUESTRA = {
   "Beige o crema": "#DCC49B",
   Gris: "#9AA0A8",
   Naranja: "#C97A2B",
+  Dorado: "#C9A24A",
   Atigrado: "#8A6A3E",
   Tricolor: "#7A5C42",
   "Blanco con manchas": "#CFCAC2",
@@ -37,12 +39,13 @@ export const COLOR_MUESTRA = {
 // Colores que la gente confunde entre si. Suman parcial, no cero.
 export const COLOR_VECINO = {
   Blanco: ["Beige o crema", "Blanco con manchas"],
-  "Beige o crema": ["Blanco", "Café", "Naranja"],
-  Café: ["Atigrado", "Beige o crema", "Negro"],
+  "Beige o crema": ["Blanco", "Café", "Naranja", "Dorado"],
+  Café: ["Atigrado", "Beige o crema", "Negro", "Dorado"],
   Atigrado: ["Café", "Gris", "Naranja"],
   Gris: ["Negro", "Atigrado"],
   Negro: ["Gris", "Café"],
-  Naranja: ["Beige o crema", "Atigrado"],
+  Naranja: ["Beige o crema", "Atigrado", "Dorado"],
+  Dorado: ["Beige o crema", "Naranja", "Café"],
   Tricolor: ["Blanco con manchas", "Café"],
   "Blanco con manchas": ["Blanco", "Tricolor"],
 };
@@ -55,6 +58,7 @@ export const COLA = ["Larga", "Corta o mocha", "Enroscada"];
 
 export const SENAS = [
   "Llevaba collar",
+  "Lleva pañoleta",
   "Tiene placa",
   "Tiene chip",
   "Cicatriz visible",

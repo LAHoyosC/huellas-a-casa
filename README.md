@@ -96,7 +96,7 @@ Para trabajar contra staging en local: `cp .env.staging .env.local`.
 **Datos de prueba en staging**: `python scripts/semilla-staging.py` siembra ~30
 fichas inventadas (varios municipios, gemelas, reencontradas, con fotos
 generadas en R2 bajo `staging/`) y unas búsquedas. Solo apunta a staging.
-Voluntaria de prueba: `laura.hoyos+voluntaria@dataplor.com`.
+Voluntaria de prueba: `pruebas.huellasacasa@gmail.com` (solo existe en staging).
 
 ### Workflows automáticos
 
