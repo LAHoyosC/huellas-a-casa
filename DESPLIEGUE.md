@@ -68,12 +68,11 @@ Para que alguien pueda aprobar fichas y marcar reencuentros:
 
 1. Supabase → **Authentication** → **Users** → **Add user** → correo y
    contraseña de la persona.
-2. Copia su **UUID** (la columna ID).
-3. **SQL Editor**:
+2. **SQL Editor**, con el correo de la persona:
 
    ```sql
    insert into voluntarios (id, nombre, refugio)
-   values ('PEGA-AQUI-EL-UUID', 'Nombre', 'Refugio');
+   select id, 'Nombre', 'Refugio' from auth.users where email = 'correo@ejemplo.com';
    ```
 
 (Todavía no hay pantalla de inicio de sesión en la página; es lo siguiente

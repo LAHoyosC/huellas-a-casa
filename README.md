@@ -93,6 +93,11 @@ npx wrangler dev         # en otra terminal, si necesitas subir fotos
 
 Para trabajar contra staging en local: `cp .env.staging .env.local`.
 
+**Datos de prueba en staging**: `python scripts/semilla-staging.py` siembra ~30
+fichas inventadas (varios municipios, gemelas, reencontradas, con fotos
+generadas en R2 bajo `staging/`) y unas búsquedas. Solo apunta a staging.
+Voluntaria de prueba: `pruebas.huellasacasa@gmail.com` (solo existe en staging).
+
 ### Workflows automáticos
 
 | Workflow | Cuándo | Qué hace |
@@ -115,11 +120,11 @@ de la página).
 1. Supabase → **Authentication → Users → Add user → Create new user**: correo
    y contraseña, y marca **Auto Confirm User** (así no depende de un correo
    de confirmación).
-2. Copia su UUID y corre en el SQL Editor:
+2. En el **SQL Editor**, con el correo de esa persona:
 
 ```sql
 insert into voluntarios (id, nombre, refugio)
-values ('PEGA-AQUI-EL-UUID', 'Nombre', 'Refugio');
+select id, 'Nombre', 'Refugio' from auth.users where email = 'correo@ejemplo.com';
 ```
 
 Para desactivar a alguien: `update voluntarios set activo = false where id = '...'`.

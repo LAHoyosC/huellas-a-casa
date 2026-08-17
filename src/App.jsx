@@ -60,6 +60,15 @@ function CampoContacto({ medio, valor, onMedio, onValor, placeholderNombre }) {
   );
 }
 
+// Campos de la ficha que se pueden escribir desde el formulario. Al editar
+// solo se envian estos: nunca id, codigo, estado, verificado ni fechas.
+const CAMPOS_FICHA = [
+  "especie", "tamano", "color", "pelo", "sexo", "edad", "orejas", "cola", "senas", "collar_color",
+  "departamento", "municipio", "barrio", "fecha_hallazgo", "custodio", "lugar",
+  "contacto_nombre", "contacto_telefono", "contacto_medio", "nota", "lugar_mapa", "fuente_url",
+];
+const soloCampos = (obj) => Object.fromEntries(CAMPOS_FICHA.map((k) => [k, obj[k] ?? null]));
+
 const botonSecundario = (color) => ({
   background: "transparent", border: `1.5px solid ${color === T.verde ? T.verde : T.linea}`,
   color, padding: "9px 13px", borderRadius: 8, fontSize: 13.5, fontWeight: 600, cursor: "pointer",
@@ -214,7 +223,7 @@ function enlaceFicha(codigo) {
   return `${window.location.origin}${window.location.pathname}#${codigo}`;
 }
 
-function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar }) {
+function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar, onEditar }) {
   const [copiado, setCopiado] = useState(false);
   const reencontrado = r.estado === "reencontrado";
   const senas = r.senas || [];
@@ -303,7 +312,7 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar 
               <a href={enlaceContacto(r.contacto_medio, r.contacto_telefono)} target="_blank" rel="noreferrer" style={{
                 background: T.verde, color: T.blanco, textDecoration: "none", padding: "10px 15px", borderRadius: 8, fontSize: 14.5, fontWeight: 640,
               }}>
-                Escribir a {r.contacto_nombre}{r.contacto_medio && r.contacto_medio !== "WhatsApp" ? ` por ${r.contacto_medio}` : ""}
+                {r.contacto_nombre ? `Escribir a ${r.contacto_nombre}` : "Escribir"} por {r.contacto_medio || "WhatsApp"}
               </a>
             )}
             {r.lugar_mapa && (
@@ -317,6 +326,7 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar 
           {voluntario && !reencontrado && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.linea}` }}>
               {!r.verificado && <button type="button" onClick={() => onAprobar(r)} style={botonSecundario(T.verde)}>Aprobar ficha</button>}
+              <button type="button" onClick={() => onEditar(r)} style={botonSecundario(T.tinta)}>Editar ficha</button>
               <button type="button" onClick={() => onReencontrar(r)} style={botonSecundario(T.tintaSuave)}>Marcar como reencontrado</button>
               <button type="button" onClick={() => { onOcultar(r); onCerrar(); }} style={botonSecundario(T.tintaSuave)}>Ocultar</button>
             </div>
@@ -513,7 +523,7 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
                     padding: "9px 14px", borderRadius: 8, fontSize: 14, fontWeight: 640,
                   }}
                 >
-                  Escribir a {r.contacto_nombre}{r.contacto_medio && r.contacto_medio !== "WhatsApp" ? ` por ${r.contacto_medio}` : ""}
+                  {r.contacto_nombre ? `Escribir a ${r.contacto_nombre}` : "Escribir"} por {r.contacto_medio || "WhatsApp"}
                 </a>
                 {r.lugar_mapa && (
                   <a href={r.lugar_mapa} target="_blank" rel="noreferrer" style={{
@@ -595,11 +605,11 @@ function Aviso() {
       <Bloque titulo="TUS DATOS">
         <ul style={{ margin: 0, paddingLeft: 20 }}>
           <li><strong style={{ fontWeight: 660 }}>Qué guardamos:</strong> los rasgos y la foto del
-            animal, el municipio y barrio, y un nombre y un contacto (WhatsApp, correo o Instagram).</li>
+            animal, el municipio y barrio, y un contacto (WhatsApp, correo o Instagram).</li>
           <li><strong style={{ fontWeight: 660 }}>Para qué:</strong> únicamente para reunir animales
             con sus familias. No los usamos para nada más ni se los pasamos a nadie.</li>
-          <li><strong style={{ fontWeight: 660 }}>Quién los ve:</strong> el nombre y WhatsApp de
-            quien cuida un animal <em>se publican</em> en su ficha, para que el tutor pueda escribir.
+          <li><strong style={{ fontWeight: 660 }}>Quién los ve:</strong> el contacto de
+            quien cuida un animal <em>se publica</em> en su ficha, para que el tutor pueda escribir.
             El contacto de quien busca a su mascota <em>no se publica</em>: solo lo ven los
             voluntarios, para avisarle si llega algo parecido.</li>
           <li><strong style={{ fontWeight: 660 }}>Cuánto tiempo:</strong> esta es una iniciativa
@@ -625,10 +635,10 @@ const botonFoto = {
   background: T.blanco, fontSize: 14.5, fontWeight: 560, cursor: "pointer",
 };
 
-function CargarFoto({ archivo, onArchivo }) {
+function CargarFoto({ archivo, onArchivo, actual }) {
   const refCamara = useRef(null);
   const refCarrete = useRef(null);
-  const [vista, setVista] = useState(null);
+  const [vista, setVista] = useState(actual || null);
   const [error, setError] = useState("");
 
   const elegir = async (e) => {
@@ -793,6 +803,30 @@ export default function App() {
   const [duplicados, setDuplicados] = useState(null);
   const [avisoFoto, setAvisoFoto] = useState("");
   const [detalleId, setDetalleId] = useState(null);
+  const [editandoId, setEditandoId] = useState(null);
+  const [fueEdicion, setFueEdicion] = useState(false);
+  const editando = editandoId ? registros.find((x) => x.id === editandoId) : null;
+
+  function editarFicha(r) {
+    setReporte({ ...soloCampos(r), senas: r.senas || [] });
+    setMostrarMapa(!!r.lugar_mapa);
+    setArchivoFoto(null);
+    setEditandoId(r.id);
+    setDetalleId(null);
+    setGuardado(null);
+    setErrorGuardar("");
+    setDuplicados(null);
+    setModo("reportar");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelarEdicion() {
+    setEditandoId(null);
+    setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+    setMostrarMapa(false);
+    setArchivoFoto(null);
+    setModo("lista");
+  }
   const detalle = detalleId ? registros.find((x) => x.id === detalleId) : null;
 
   const verFicha = (r) => { setDetalleId(r.id); history.replaceState(null, "", `#${r.codigo}`); };
@@ -884,7 +918,7 @@ export default function App() {
   }
 
   async function guardarReporte(ignorarDuplicados = false) {
-    const obligatorios = ["especie", "tamano", "color", "departamento", "municipio", "contacto_nombre", "contacto_telefono"];
+    const obligatorios = ["especie", "tamano", "color", "departamento", "municipio", "contacto_telefono"];
     const faltan = obligatorios.filter((k) => !reporte[k]);
     if (faltan.length) {
       setErrorGuardar("Faltan datos obligatorios. Revisa especie, tamaño, color, ubicación y contacto.");
@@ -896,6 +930,11 @@ export default function App() {
     }
     if (reporte.lugar_mapa && !esEnlaceMapa(reporte.lugar_mapa)) {
       setErrorGuardar("El enlace del sitio debe ser de Google Maps (empieza por https://maps.app.goo.gl/ o https://www.google.com/maps/).");
+      return;
+    }
+
+    if (editandoId) {
+      await guardarEdicion();
       return;
     }
 
@@ -938,6 +977,41 @@ export default function App() {
 
       setRegistros((p) => [data, ...p]);
       setGuardado(data.codigo);
+      setFueEdicion(false);
+      setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+      setMostrarMapa(false);
+      setArchivoFoto(null);
+    } catch (e) {
+      setErrorGuardar(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  // Solo voluntarios (RLS lo exige). Foto nueva opcional: se sube bajo el
+  // mismo id y reemplaza las URLs.
+  async function guardarEdicion() {
+    setGuardando(true);
+    setErrorGuardar("");
+    try {
+      let urls = {};
+      let fotoFallo = false;
+      if (archivoFoto) {
+        try { urls = await subirFoto(archivoFoto, editandoId); } catch { fotoFallo = true; }
+      }
+      const cambios = { ...soloCampos(reporte), ...urls };
+      const { data, error } = await supabase
+        .from("mascotas")
+        .update(cambios)
+        .eq("id", editandoId)
+        .select()
+        .single();
+      if (error) throw new Error("No se pudo guardar. Solo un voluntario con sesión activa puede editar fichas.");
+      setAvisoFoto(fotoFallo ? "Los datos quedaron guardados, pero la foto nueva no se pudo subir." : "");
+      setRegistros((p) => p.map((x) => (x.id === data.id ? data : x)));
+      setGuardado(data.codigo);
+      setFueEdicion(true);
+      setEditandoId(null);
       setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
       setMostrarMapa(false);
       setArchivoFoto(null);
@@ -1178,32 +1252,43 @@ export default function App() {
 
         {modo === "reportar" && guardado && (
           <section style={{ border: `1.5px solid ${T.verde}`, background: T.verdeClaro, borderRadius: 13, padding: "26px 24px" }}>
-            <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: ".12em", color: T.verde }}>FICHA CREADA</div>
+            <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: ".12em", color: T.verde }}>{fueEdicion ? "FICHA ACTUALIZADA" : "FICHA CREADA"}</div>
             <h2 style={{ margin: "8px 0 6px", fontSize: 26, fontWeight: 740, letterSpacing: "-.02em" }}>{guardado}</h2>
             <p style={{ margin: "0 0 18px", fontSize: 15, color: T.tintaSuave, lineHeight: 1.55 }}>
-              Anota este código en la jaula o el guacal. Es el que se usa para confirmar la entrega.
+              {fueEdicion ? "Los cambios ya se ven en el listado." : "Anota este código en la jaula o el guacal. Es el que se usa para confirmar la entrega."}
             </p>
             {avisoFoto && (
               <p style={{ margin: "-8px 0 18px", fontSize: 14.5, color: T.rojo, lineHeight: 1.5 }}>{avisoFoto}</p>
             )}
-            <button type="button" onClick={() => setGuardado(null)} style={{
+            <button type="button" onClick={() => { setGuardado(null); if (fueEdicion) setModo("lista"); }} style={{
               background: T.verde, color: T.blanco, border: "none", borderRadius: 9,
               padding: "13px 20px", fontSize: 15.5, fontWeight: 660, cursor: "pointer",
-            }}>Registrar la siguiente mascota</button>
+            }}>{fueEdicion ? "Volver al listado" : "Registrar la siguiente mascota"}</button>
           </section>
         )}
 
         {modo === "reportar" && !guardado && (
           <section>
-            <div style={{
-              background: T.verdeClaro, border: "1px solid #CBE0D6", borderRadius: 11,
-              padding: "14px 16px", marginBottom: 24, fontSize: 14.5, lineHeight: 1.5,
-            }}>
-              Una ficha por animal. La foto es para que el tutor reconozca: tómala con luz y de cuerpo entero.
-            </div>
+            {editando ? (
+              <div style={{
+                background: T.violetaClaro, border: `1px solid ${T.violeta}`, borderRadius: 11,
+                padding: "14px 16px", marginBottom: 24, fontSize: 14.5, lineHeight: 1.5,
+                display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap",
+              }}>
+                <span><strong style={{ fontWeight: 660 }}>Editando {editando.codigo}.</strong> Cambia lo que haga falta y guarda. Si subes una foto nueva, reemplaza la actual.</span>
+                <button type="button" onClick={cancelarEdicion} style={botonSecundario(T.violeta)}>Cancelar</button>
+              </div>
+            ) : (
+              <div style={{
+                background: T.verdeClaro, border: "1px solid #CBE0D6", borderRadius: 11,
+                padding: "14px 16px", marginBottom: 24, fontSize: 14.5, lineHeight: 1.5,
+              }}>
+                Una ficha por animal. La foto es para que el tutor reconozca: tómala con luz y de cuerpo entero.
+              </div>
+            )}
 
             <Campo numero="00" titulo="Foto de la mascota">
-              <CargarFoto archivo={archivoFoto} onArchivo={setArchivoFoto} />
+              <CargarFoto key={editandoId || "nueva"} archivo={archivoFoto} onArchivo={setArchivoFoto} actual={editando?.foto_thumb_url} />
             </Campo>
 
             <Zona v={reporte} set={setR} numero="01" />
@@ -1248,14 +1333,10 @@ export default function App() {
               </div>
             </Campo>
 
-            <Campo numero="15" titulo="Quién responde y por dónde"
-              ayuda="Este nombre y contacto se publican en la ficha para que el tutor escriba. Pon el del refugio o un número que puedas mostrar; no uses uno personal si no quieres que quede visible.">
-              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-                <input style={entradaTexto} value={reporte.contacto_nombre || ""}
-                  onChange={(e) => setR("contacto_nombre", e.target.value)} placeholder="Nombre de quien atiende" />
-                <CampoContacto medio={reporte.contacto_medio} valor={reporte.contacto_telefono}
-                  onMedio={(m) => setR("contacto_medio", m)} onValor={(v) => setR("contacto_telefono", v)} />
-              </div>
+            <Campo numero="15" titulo="Contacto para el tutor"
+              ayuda="Se publica en la ficha para que el tutor escriba. Pon el del refugio o uno que puedas mostrar; no uses uno personal si no quieres que quede visible.">
+              <CampoContacto medio={reporte.contacto_medio} valor={reporte.contacto_telefono}
+                onMedio={(m) => setR("contacto_medio", m)} onValor={(v) => setR("contacto_telefono", v)} />
             </Campo>
 
             <NotaLibre
@@ -1319,9 +1400,9 @@ export default function App() {
               background: guardando ? T.tintaSuave : T.verde, color: T.blanco, border: "none",
               borderRadius: 10, padding: "16px 26px", fontSize: 17, fontWeight: 680,
               cursor: guardando ? "wait" : "pointer", marginLeft: 25, marginTop: 6,
-            }}>{guardando ? "Guardando…" : "Guardar ficha"}</button>
+            }}>{guardando ? "Guardando…" : editando ? "Guardar cambios" : "Guardar ficha"}</button>
             <p style={{ margin: "12px 0 0 25px", fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
-              Al guardar, autorizas que el nombre y el contacto se publiquen en la ficha, solo para
+              Al guardar, autorizas que el contacto se publique en la ficha, solo para
               reunir al animal con su familia.{" "}
               <a href="#aviso" onClick={() => setModo("inicio")} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
@@ -1361,7 +1442,7 @@ export default function App() {
 
       {detalle && (
         <Detalle r={detalle} voluntario={voluntario} onCerrar={cerrarFicha}
-          onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} />
+          onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onEditar={editarFicha} />
       )}
     </div>
   );
