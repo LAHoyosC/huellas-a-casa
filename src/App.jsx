@@ -405,7 +405,7 @@ function Aviso() {
       <Bloque titulo="CONTACTO">
         Para dudas, correcciones o para vincular tu refugio:
         <ul style={{ margin: "6px 0 0", paddingLeft: 20 }}>
-          <li>WhatsApp o llamada:{" "}
+          <li>WhatsApp:{" "}
             <a href={CONTACTO_WHATSAPP} target="_blank" rel="noreferrer" style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_CELULAR}</a></li>
           <li>Correo:{" "}
             <a href={`mailto:${CONTACTO_DATOS}`} style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_DATOS}</a></li>
