@@ -200,6 +200,133 @@ function NuevaClave({ onListo }) {
   );
 }
 
+function Dato({ etiqueta, valor }) {
+  if (!valor) return null;
+  return (
+    <div>
+      <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: ".1em", color: T.tintaSuave }}>{etiqueta}</div>
+      <div style={{ fontSize: 15, marginTop: 2 }}>{valor}</div>
+    </div>
+  );
+}
+
+function enlaceFicha(codigo) {
+  return `${window.location.origin}${window.location.pathname}#${codigo}`;
+}
+
+function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar }) {
+  const [copiado, setCopiado] = useState(false);
+  const reencontrado = r.estado === "reencontrado";
+  const senas = r.senas || [];
+
+  useEffect(() => {
+    const tecla = (e) => { if (e.key === "Escape") onCerrar(); };
+    window.addEventListener("keydown", tecla);
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", tecla); document.body.style.overflow = ""; };
+  }, [onCerrar]);
+
+  async function compartir() {
+    const url = enlaceFicha(r.codigo);
+    const texto = `${r.especie} ${r.tamano?.toLowerCase() || ""} ${r.color?.toLowerCase() || ""} en ${r.municipio} — ficha ${r.codigo}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: `Huellas a Casa · ${r.codigo}`, text: texto, url }); return; } catch { /* cancelado */ }
+    }
+    try { await navigator.clipboard.writeText(url); setCopiado(true); setTimeout(() => setCopiado(false), 2000); } catch { prompt("Copia este enlace:", url); }
+  }
+
+  return (
+    <div onClick={onCerrar} style={{
+      position: "fixed", inset: 0, background: "rgba(27,32,41,.55)", zIndex: 50,
+      display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 12px", overflowY: "auto",
+    }}>
+      <article onClick={(e) => e.stopPropagation()} style={{
+        background: T.blanco, borderRadius: 14, maxWidth: 680, width: "100%", overflow: "hidden",
+        boxShadow: "0 20px 60px rgba(0,0,0,.25)",
+      }}>
+        <div style={{ position: "relative", background: T.papelHondo }}>
+          {r.foto_url || r.foto_thumb_url ? (
+            <img src={r.foto_url || r.foto_thumb_url} alt=""
+              style={{ width: "100%", maxHeight: "70vh", objectFit: "contain", display: "block", background: "#111" }} />
+          ) : (
+            <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", color: "#B9B2A6", fontFamily: MONO, fontSize: 12 }}>SIN FOTO</div>
+          )}
+          <button type="button" onClick={onCerrar} aria-label="Cerrar" style={{
+            position: "absolute", top: 10, right: 10, width: 36, height: 36, borderRadius: "50%",
+            border: "none", background: "rgba(255,255,255,.92)", fontSize: 18, cursor: "pointer", fontWeight: 700,
+          }}>×</button>
+        </div>
+
+        <div style={{ padding: "18px 20px 22px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontFamily: MONO, fontSize: 12, color: T.tintaSuave }}>
+                {r.codigo}
+                {!r.verificado && <span style={{ marginLeft: 8, color: T.ambar }}>SIN VERIFICAR</span>}
+                {reencontrado && <span style={{ marginLeft: 8, color: T.verde }}>REENCONTRADO</span>}
+              </div>
+              <h2 style={{ margin: "4px 0 0", fontSize: 24, fontWeight: 740, letterSpacing: "-.02em" }}>
+                {r.especie} {r.tamano?.toLowerCase()}, {r.color?.toLowerCase()}
+              </h2>
+            </div>
+            <button type="button" onClick={compartir} style={botonSecundario(T.tinta)}>
+              {copiado ? "Enlace copiado ✓" : "Compartir"}
+            </button>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12, marginTop: 16 }}>
+            <Dato etiqueta="SEXO" valor={r.sexo} />
+            <Dato etiqueta="EDAD" valor={r.edad} />
+            <Dato etiqueta="PELO" valor={r.pelo} />
+            <Dato etiqueta="OREJAS" valor={r.orejas} />
+            <Dato etiqueta="COLA" valor={r.cola} />
+            <Dato etiqueta="COLLAR" valor={r.collar_color} />
+            <Dato etiqueta="RECOGIDO EL" valor={r.fecha_hallazgo} />
+            <Dato etiqueta="APARECIÓ EN" valor={[r.barrio, r.municipio, r.departamento].filter(Boolean).join(", ")} />
+            <Dato etiqueta="ESTÁ EN" valor={[r.custodio, r.lugar].filter(Boolean).join(" — ")} />
+          </div>
+
+          {senas.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 14 }}>
+              {senas.map((x) => (
+                <span key={x} style={{ fontSize: 12.5, padding: "4px 9px", borderRadius: 20, background: T.ambarClaro, color: "#8A5A12", fontWeight: 560 }}>{x}</span>
+              ))}
+            </div>
+          )}
+
+          {r.nota && (
+            <p style={{ margin: "14px 0 0", fontSize: 15, fontStyle: "italic", lineHeight: 1.55 }}>“{r.nota}”</p>
+          )}
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18, alignItems: "center" }}>
+            {!reencontrado && (
+              <a href={enlaceContacto(r.contacto_medio, r.contacto_telefono)} target="_blank" rel="noreferrer" style={{
+                background: T.verde, color: T.blanco, textDecoration: "none", padding: "10px 15px", borderRadius: 8, fontSize: 14.5, fontWeight: 640,
+              }}>
+                Escribir a {r.contacto_nombre}{r.contacto_medio && r.contacto_medio !== "WhatsApp" ? ` por ${r.contacto_medio}` : ""}
+              </a>
+            )}
+            {r.lugar_mapa && (
+              <a href={r.lugar_mapa} target="_blank" rel="noreferrer" style={{ ...botonSecundario(T.verde), textDecoration: "none" }}>Cómo llegar</a>
+            )}
+            {r.fuente_url && /^https?:\/\//i.test(r.fuente_url) && (
+              <a href={r.fuente_url} target="_blank" rel="noreferrer noopener" style={{ ...botonSecundario(T.tintaSuave), textDecoration: "none" }}>Publicación original ↗</a>
+            )}
+          </div>
+
+          {voluntario && !reencontrado && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.linea}` }}>
+              {!r.verificado && <button type="button" onClick={() => onAprobar(r)} style={botonSecundario(T.verde)}>Aprobar ficha</button>}
+              <button type="button" onClick={() => onReencontrar(r)} style={botonSecundario(T.tintaSuave)}>Marcar como reencontrado</button>
+              <button type="button" onClick={() => { onOcultar(r); onCerrar(); }} style={botonSecundario(T.tintaSuave)}>Ocultar</button>
+            </div>
+          )}
+        </div>
+      </article>
+    </div>
+  );
+}
+
 /* ------------------------------ PIEZAS ----------------------------- */
 
 function Opcion({ activo, onClick, children, muestra }) {
@@ -250,7 +377,7 @@ function Sello({ valor }) {
   );
 }
 
-function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, onOcultar }) {
+function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, onOcultar, onVer }) {
   const reencontrado = r.estado === "reencontrado";
   const senas = r.senas || [];
   return (
@@ -260,7 +387,8 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
       borderRadius: 12, overflow: "hidden", opacity: reencontrado ? 0.72 : 1,
     }}>
       <div style={{ display: "flex" }}>
-        <div style={{ width: 116, flexShrink: 0, borderRight: `1px solid ${T.linea}` }}>
+        <div style={{ width: 116, flexShrink: 0, borderRight: `1px solid ${T.linea}`, cursor: onVer ? "pointer" : "default" }}
+          onClick={() => onVer && onVer(r)} title="Ver ficha completa">
           {r.foto_thumb_url ? (
             <img src={r.foto_thumb_url} alt="" loading="lazy"
               style={{ width: "100%", aspectRatio: "1/1", objectFit: "cover", display: "block" }} />
@@ -365,6 +493,11 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
           )}
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12, alignItems: "center" }}>
+            {onVer && (
+              <button type="button" onClick={() => onVer(r)} style={botonSecundario(T.tinta)}>
+                Ver ficha
+              </button>
+            )}
             {reencontrado ? (
               <span style={{
                 fontFamily: MONO, fontSize: 11.5, letterSpacing: ".1em", color: T.verde,
@@ -659,6 +792,11 @@ export default function App() {
   const [guardado, setGuardado] = useState(null);
   const [duplicados, setDuplicados] = useState(null);
   const [avisoFoto, setAvisoFoto] = useState("");
+  const [detalleId, setDetalleId] = useState(null);
+  const detalle = detalleId ? registros.find((x) => x.id === detalleId) : null;
+
+  const verFicha = (r) => { setDetalleId(r.id); history.replaceState(null, "", `#${r.codigo}`); };
+  const cerrarFicha = () => { setDetalleId(null); history.replaceState(null, "", window.location.pathname + window.location.search); };
   const [mostrarMapa, setMostrarMapa] = useState(false);
   const [sesion, setSesion] = useState(null);
   const voluntario = sesion?.voluntario || null;
@@ -680,7 +818,16 @@ export default function App() {
 
     if (!configurado) setErrorCarga("La página no tiene configurada la conexión a la base de datos. Avisa a quien administra el sitio.");
     else if (error) setErrorCarga("No se pudo cargar el listado. Revisa tu conexión y vuelve a intentar.");
-    else { setRegistros(data || []); setErrorCarga(""); }
+    else {
+      setRegistros(data || []);
+      setErrorCarga("");
+      // Enlace directo a una ficha: .../#PER-0002
+      const codigo = decodeURIComponent(window.location.hash.slice(1));
+      if (codigo) {
+        const f = (data || []).find((x) => x.codigo === codigo);
+        if (f) { setDetalleId(f.id); setModo("lista"); }
+      }
+    }
     setCargando(false);
   }
 
@@ -1021,7 +1168,7 @@ export default function App() {
                 <div style={{ display: "grid", gap: 14 }}>
                   {resultados.map(({ ficha, resultado }) => (
                     <Ficha key={ficha.id} r={ficha} resultado={resultado}
-                      nombres={busqueda.nombres} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} />
+                      nombres={busqueda.nombres} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onVer={verFicha} />
                   ))}
                 </div>
               </>
@@ -1142,7 +1289,7 @@ export default function App() {
                 </p>
                 <div style={{ display: "grid", gap: 12 }}>
                   {duplicados.map(({ ficha, resultado }) => (
-                    <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} />
+                    <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onVer={verFicha} />
                   ))}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
@@ -1197,7 +1344,7 @@ export default function App() {
             <div style={{ display: "grid", gap: 14 }}>
               {cargando && <p style={{ color: T.tintaSuave, fontSize: 15 }}>Cargando fichas…</p>}
               {!cargando && listaFiltrada.map((r) => (
-                <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} />
+                <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onVer={verFicha} />
               ))}
               {!cargando && listaFiltrada.length === 0 && (
                 <div style={{
@@ -1211,6 +1358,11 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {detalle && (
+        <Detalle r={detalle} voluntario={voluntario} onCerrar={cerrarFicha}
+          onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} />
+      )}
     </div>
   );
 }
