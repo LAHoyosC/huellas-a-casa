@@ -35,7 +35,11 @@ export const CONCEPTOS = {
   },
   collar: {
     etiqueta: "llevaba collar",
-    raices: ["collar", "correa", "panolet", "panuel", "banda", "cintill", "arnes"],
+    raices: ["collar", "correa", "cintill", "arnes"],
+  },
+  panoleta: {
+    etiqueta: "lleva pañoleta",
+    raices: ["panolet", "panuel", "bandan", "trapit", "banda"],
   },
   placa: {
     etiqueta: "identificación",
@@ -105,6 +109,7 @@ export const CONCEPTOS = {
 // un voluntario apurado marca chips, un tutor angustiado escribe.
 export const SENA_A_CONCEPTO = {
   "Llevaba collar": "collar",
+  "Lleva pañoleta": "panoleta",
   "Tiene placa": "placa",
   "Tiene chip": "placa",
   "Cojea": "cojera",

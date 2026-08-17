@@ -31,7 +31,7 @@ Cuatro reglas gobiernan el puntaje:
    y color, dos perros "mediano beige" no pasan de un parecido moderado
    (~60 %): no hay evidencia para más. La página lo avisa y sugiere
    responder más preguntas. Pequeño contra grande se descarta; mediano
-   contra grande suma poco. Y la raza o tipo (solo perros, opcional) es lo
+   contra grande suma poco. Y la raza (solo perros, opcional) es lo
    que más pesa cuando ambas partes la dieron: dos razas concretas distintas
    restan.
 
@@ -114,6 +114,11 @@ npx wrangler dev         # en otra terminal, si necesitas subir fotos
 
 Para trabajar contra staging en local: `cp .env.staging .env.local`.
 
+**Datos de prueba en staging**: `python scripts/semilla-staging.py` siembra ~30
+fichas inventadas (varios municipios, gemelas, reencontradas, con fotos
+generadas en R2 bajo `staging/`) y unas búsquedas. Solo apunta a staging.
+Voluntaria de prueba: `pruebas.huellasacasa@gmail.com` (solo existe en staging).
+
 ### Workflows automáticos
 
 | Workflow | Cuándo | Qué hace |
@@ -143,11 +148,11 @@ el filtro «Ocultas» del listado y pueden volver a mostrarla.
 1. Supabase → **Authentication → Users → Add user → Create new user**: correo
    y contraseña, y marca **Auto Confirm User** (así no depende de un correo
    de confirmación).
-2. Copia su UUID y corre en el SQL Editor:
+2. En el **SQL Editor**, con el correo de esa persona:
 
 ```sql
 insert into voluntarios (id, nombre, refugio)
-values ('PEGA-AQUI-EL-UUID', 'Nombre', 'Refugio');
+select id, 'Nombre', 'Refugio' from auth.users where email = 'correo@ejemplo.com';
 ```
 
 Para desactivar a alguien: `update voluntarios set activo = false where id = '...'`.
