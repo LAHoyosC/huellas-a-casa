@@ -45,3 +45,31 @@ export function alCambiarSesion(cb) {
   const { data } = supabase.auth.onAuthStateChange(() => { sesionActual().then(cb); });
   return () => data.subscription.unsubscribe();
 }
+
+// Recuperacion de contrasena. Supabase manda un correo con un enlace que
+// vuelve a esta misma pagina con #type=recovery; ahi se pide la nueva.
+export async function pedirRecuperacion(correo) {
+  const { error } = await supabase.auth.resetPasswordForEmail(correo.trim(), {
+    redirectTo: window.location.origin + window.location.pathname,
+  });
+  if (error) throw new Error("No se pudo enviar el correo. Revisa la dirección e intenta de nuevo.");
+}
+
+export async function cambiarClave(nueva) {
+  const { error } = await supabase.auth.updateUser({ password: nueva });
+  if (error) {
+    const m = (error.message || "").toLowerCase();
+    if (m.includes("at least") || m.includes("weak") || m.includes("short")) {
+      throw new Error("La contraseña debe tener al menos 8 caracteres.");
+    }
+    if (m.includes("same") || m.includes("different")) {
+      throw new Error("La contraseña nueva debe ser distinta a la anterior.");
+    }
+    throw new Error("No se pudo cambiar la contraseña. Vuelve a pedir el enlace de recuperación.");
+  }
+}
+
+// true si la pagina se abrio desde el enlace del correo de recuperacion.
+export function llegoParaRecuperar() {
+  return /[#&]type=recovery/.test(window.location.hash);
+}
