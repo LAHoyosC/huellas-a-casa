@@ -18,7 +18,7 @@ Casi todo el formulario es de selección. Eso es lo que hace posible comparar:
 si un voluntario escribe "cafecito con manchitas" y el tutor escribe "marrón
 con blanco", ningún sistema los cruza. Con vocabulario cerrado, sí.
 
-Tres reglas gobiernan el puntaje:
+Cuatro reglas gobiernan el puntaje:
 
 1. **Solo se comparan los campos que ambas partes respondieron.** Alguien
    conmocionado que no recuerda la cola no pierde coincidencias.
@@ -27,6 +27,13 @@ Tres reglas gobiernan el puntaje:
 3. **La nota libre solo suma, nunca resta.** Si el tutor menciona algo y la
    ficha no lo confirma, no es evidencia en contra: el voluntario pudo no
    haberse fijado.
+4. **El porcentaje refleja cuánta información se comparó.** Con solo tamaño
+   y color, dos perros "mediano beige" no pasan de un parecido moderado
+   (~60 %): no hay evidencia para más. La página lo avisa y sugiere
+   responder más preguntas. Pequeño contra grande se descarta; mediano
+   contra grande suma poco. Y la raza o tipo (solo perros, opcional) es lo
+   que más pesa cuando ambas partes la dieron: dos razas concretas distintas
+   restan.
 
 La nota se cruza por significado, no por palabras exactas: "cojea", "renquea"
 y "camina mal" son lo mismo para el sistema. Ese diccionario vive en
@@ -54,6 +61,7 @@ Todo corre en planes gratuitos; nadie paga ni cobra por esto.
 | Página web | Cloudflare Workers | Archivos estáticos + un Worker pequeño para las fotos. Se recompila sola con cada cambio en `main`. |
 | Base de datos | Supabase, plan gratuito, región Virginia (EE. UU.) | Fichas, búsquedas, historial de cambios. Protegida con RLS. |
 | Fotos | Cloudflare R2, bucket `huellas-fotos` | Las sube y sirve [`worker/index.js`](worker/index.js). 10 GB gratis, salida sin costo. |
+| Compartir fichas | El mismo Worker | Cada ficha tiene enlace propio (`/m/PER-0012`). El Worker responde ahí con la foto y los datos del animal en las etiquetas de vista previa, para que al mandarlo por WhatsApp salga la imagen. La foto solo va si un voluntario ya aprobó la ficha. |
 | Pruebas (staging) | Segundo proyecto de Supabase con el mismo esquema | Cada *pull request* se prueba contra esta base, nunca contra la real. |
 | Respaldos | Repositorio privado `huellas-a-casa-respaldos`, copia cada noche | Privado porque incluyen contactos de particulares. |
 | Código | Este repositorio, público | Cualquiera puede revisar qué hace la página con los datos. |
@@ -112,6 +120,13 @@ Cualquiera puede registrar una mascota encontrada, pero entra marcada como
 marca reencuentros y oculta fichas (enlace «Voluntarios» arriba a la derecha
 de la página).
 
+Mientras una ficha está sin verificar, su foto se muestra **borrosa** al
+público (quien quiera la destapa tocándola) y **no** va en la vista previa al
+compartir el enlace. Así una imagen indebida no queda al aire sin que nadie
+la haya visto. Una ficha **oculta** desaparece para el público (la base misma
+no se la entrega a nadie sin sesión de voluntario); los voluntarios la ven con
+el filtro «Ocultas» del listado y pueden volver a mostrarla.
+
 1. Supabase → **Authentication → Users → Add user → Create new user**: correo
    y contraseña, y marca **Auto Confirm User** (así no depende de un correo
    de confirmación).
@@ -158,7 +173,8 @@ src/lib/conceptos.js     Diccionario de sinónimos  ← editable por cualquiera
 src/lib/coincidencia.js  Motor de puntaje, duplicados y gemelas
 src/lib/foto.js          Compresión y subida de fotos
 src/App.jsx              Interfaz
-worker/index.js          Worker de Cloudflare: fotos en R2
+worker/index.js          Worker de Cloudflare: fotos en R2 y vista previa al compartir
+worker/entorno.js        Generado por scripts/build.mjs: a qué base lee el Worker
 scripts/build.mjs        Elige producción o staging según la rama
 supabase/migrations/     Esquema (tablas, RLS, auditoría) y migraciones, en orden
 .github/workflows/       CI, respaldo nocturno, anti-pausa

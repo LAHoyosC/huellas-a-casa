@@ -13,12 +13,20 @@
 // 3. La nota SOLO SUMA, nunca resta. Si el tutor menciona algo y la
 //    ficha no lo confirma, no es evidencia en contra: el voluntario
 //    pudo no haberse fijado.
+//
+// Y una cuarta, agregada despues de ver el motor en uso real:
+//
+// 4. El porcentaje refleja cuanta informacion se pudo comparar. Con solo
+//    tamano y color, dos perros "mediano beige" no pueden pasar de un
+//    parecido moderado: no hay evidencia para mas. Antes, con dos campos
+//    iguales salia 100% y todo perro amarillo aparecia arriba.
 // ============================================================
 
-import { EDAD, TAMANO, COLOR_VECINO } from "./catalogo.js";
+import { EDAD, TAMANO, COLOR_VECINO, RAZA_INDEFINIDA } from "./catalogo.js";
 import { conceptosDe, etiquetaDe } from "./conceptos.js";
 
 const PESOS = {
+  raza: 24,
   color: 22,
   tamano: 18,
   pelo: 11,
@@ -29,6 +37,7 @@ const PESOS = {
 };
 
 const ETIQUETA_CAMPO = {
+  raza: "raza",
   color: "color",
   tamano: "tamaño",
   pelo: "pelo",
@@ -40,6 +49,11 @@ const ETIQUETA_CAMPO = {
 
 // Cuanto puede empujar la corroboracion de la nota, como maximo.
 const EMPUJE_MAXIMO = 0.4;
+
+// Con cuanto peso comparado el porcentaje llega a valer completo. Por
+// debajo se escala hacia abajo: tamano + color (40) tocan techo en 62%;
+// con pelo y edad ademas (61) ya se puede llegar a 95-100%.
+const PESO_PLENO = 65;
 
 // Por debajo de esto no vale la pena mostrar el candidato.
 export const UMBRAL_MINIMO = 30;
@@ -55,11 +69,19 @@ export function puntaje(busqueda, ficha) {
   const coinciden = [];
   const difieren = [];
 
+  // Pequeno contra grande no es confusion: es otro animal. Se descarta.
+  if (busqueda.tamano && ficha.tamano &&
+      Math.abs(TAMANO.indexOf(busqueda.tamano) - TAMANO.indexOf(ficha.tamano)) >= 2) {
+    return null;
+  }
+
   for (const campo of Object.keys(PESOS)) {
     const a = busqueda[campo];
     const b = ficha[campo];
     if (!a || !b) continue;
     if (campo === "sexo" && (a === "No sé" || b === "No sé")) continue;
+    // "Criollo" u "otra raza" no dicen cual: no entran en la cuenta.
+    if (campo === "raza" && (RAZA_INDEFINIDA.includes(a) || RAZA_INDEFINIDA.includes(b))) continue;
 
     posible += PESOS[campo];
 
@@ -71,8 +93,17 @@ export function puntaje(busqueda, ficha) {
       coinciden.push("color parecido");
     } else if (campo === "edad" && Math.abs(EDAD.indexOf(a) - EDAD.indexOf(b)) === 1) {
       obtenido += PESOS[campo] * 0.5;
-    } else if (campo === "tamano" && Math.abs(TAMANO.indexOf(a) - TAMANO.indexOf(b)) === 1) {
-      obtenido += PESOS[campo] * 0.5;
+    } else if (campo === "tamano") {
+      // Vecino (mediano/grande): la gente lo confunde, pero menos de lo
+      // que suponiamos. Antes sumaba la mitad y un grande beige quedaba
+      // casi igual que un mediano beige.
+      obtenido += PESOS[campo] * 0.3;
+      difieren.push("tamaño (parecido)");
+    } else if (campo === "raza") {
+      // Dos razas concretas distintas: es la senal mas fuerte de que no es
+      // el mismo animal. Resta, ademas de no sumar.
+      obtenido -= PESOS[campo] * 0.5;
+      difieren.push(ETIQUETA_CAMPO[campo]);
     } else {
       difieren.push(ETIQUETA_CAMPO[campo]);
     }
@@ -103,7 +134,7 @@ export function puntaje(busqueda, ficha) {
   // Muy poca informacion comparable: mejor no opinar.
   if (posible < 30) return null;
 
-  const base = obtenido / posible;
+  const base = Math.max(0, obtenido) / posible;
 
   // Corroboracion por conceptos. Empuja hacia 100 sin pasarse.
   const cb = conceptosDe(busqueda);
@@ -112,8 +143,15 @@ export function puntaje(busqueda, ficha) {
   const fraccion = cb.length ? compartidos.length / cb.length : 0;
   const empuje = (1 - base) * EMPUJE_MAXIMO * fraccion;
 
+  // Regla 4: la nota tambien cuenta como informacion comparada.
+  const pesoComparado = posible + Math.min(compartidos.length, 3) * 8;
+  const confianza = Math.min(1, pesoComparado / PESO_PLENO);
+
   return {
-    valor: Math.round((base + empuje) * 100),
+    valor: Math.round((base + empuje) * 100 * confianza),
+    // Cuanta informacion se comparo, de 0 a 1. Por debajo de 1 la
+    // interfaz avisa que respondiendo mas preguntas el cruce afina.
+    confianza,
     coinciden,
     difieren,
     corroborados: compartidos.map(etiquetaDe),
