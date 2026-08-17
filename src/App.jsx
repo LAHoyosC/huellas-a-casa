@@ -863,7 +863,10 @@ export default function App() {
           <h1 style={{ margin: "6px 0 0", fontSize: 31, fontWeight: 760, letterSpacing: "-.03em", lineHeight: 1.05 }}>
             Huellas a Casa
           </h1>
-          <p style={{ margin: "7px 0 0", fontSize: 15.5, color: T.tintaSuave, maxWidth: 560, lineHeight: 1.5 }}>
+          <p style={{ margin: "5px 0 0", fontSize: 18, fontWeight: 620, color: T.ambar, letterSpacing: "-.01em" }}>
+            Mascotas perdidas · terremoto 10 de agosto
+          </p>
+          <p style={{ margin: "6px 0 0", fontSize: 15.5, color: T.tintaSuave, maxWidth: 560, lineHeight: 1.5 }}>
             Un solo lugar para registrar y buscar las mascotas que quedaron sin su casa.
           </p>
           <div style={{ display: "flex", gap: 22, marginTop: 16, fontFamily: MONO, fontSize: 12.5 }}>
