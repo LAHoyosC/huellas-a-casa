@@ -4,6 +4,7 @@ import { subirFoto, comprimir } from "./lib/foto.js";
 import { entrar, salir, sesionActual, alCambiarSesion } from "./lib/sesion.js";
 import { buscarCoincidencias, posiblesDuplicados, fichasGemelas, empatadosArriba } from "./lib/coincidencia.js";
 import { extraerConceptos, etiquetaDe } from "./lib/conceptos.js";
+import { sugerirDesdeNota } from "./lib/sugerencias.js";
 import {
   ESPECIE, TAMANO, TAMANO_PISTA, COLOR, COLOR_MUESTRA, PELO, SEXO, EDAD,
   OREJAS, COLA, SENAS, COLOR_COLLAR, CUSTODIO, MUNICIPIOS, RAZA, RAZA_INDEFINIDA,
@@ -510,8 +511,15 @@ function CargarFoto({ archivo, onArchivo }) {
   );
 }
 
-function NotaLibre({ valor, onCambio, numero, titulo, ayuda, placeholder }) {
+function NotaLibre({ valor, onCambio, numero, titulo, ayuda, placeholder, registro, set }) {
   const detectados = extraerConceptos(valor);
+  // Lo que la nota sugiere marcar en las casillas. Se propone, no se marca:
+  // la persona confirma con un toque (asi la evidencia queda donde cruza).
+  const sugerencias = registro && set ? sugerirDesdeNota(valor, registro) : [];
+  const aplicar = (sg) => {
+    if (sg.campo === "senas") set("senas", [...(registro.senas || []), sg.valor]);
+    else set(sg.campo, sg.valor);
+  };
   return (
     <div style={{ marginBottom: 26 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 9, marginBottom: 3, flexWrap: "wrap" }}>
@@ -529,6 +537,24 @@ function NotaLibre({ valor, onCambio, numero, titulo, ayuda, placeholder }) {
         <div style={{ fontSize: 12, color: T.tintaSuave, marginTop: 4, fontFamily: MONO }}>
           {(valor || "").length}/180
         </div>
+        {sugerencias.length > 0 && (
+          <div style={{ marginTop: 10, padding: "10px 12px", background: T.verdeClaro, borderRadius: 9, maxWidth: 420 }}>
+            <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: ".1em", color: T.verde, marginBottom: 6 }}>
+              POR LO QUE ESCRIBISTE, ¿MARCAMOS ESTO?
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {sugerencias.map((sg) => (
+                <button key={`${sg.campo}-${sg.valor}`} type="button" onClick={() => aplicar(sg)} style={{
+                  fontSize: 12.5, padding: "5px 10px", borderRadius: 20, cursor: "pointer",
+                  background: T.blanco, color: T.verde, fontWeight: 620, border: `1.5px solid ${T.verde}`,
+                }}>+ {sg.texto}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: T.tintaSuave, marginTop: 6 }}>
+              Toca para marcarlo arriba. Si no es así, ignóralo.
+            </div>
+          </div>
+        )}
         {detectados.length > 0 && (
           <div style={{ marginTop: 10, padding: "10px 12px", background: T.ambarClaro, borderRadius: 9, maxWidth: 420 }}>
             <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: ".1em", color: "#8A5A12", marginBottom: 6 }}>
@@ -973,7 +999,7 @@ export default function App() {
             <NotaLibre
               numero="11" titulo="Cuéntanos algo más de tu mascota"
               ayuda="Con tus palabras. No importa cómo lo escribas: entiendo lo mismo si dices cojea, renquea o camina mal."
-              valor={busqueda.nota} onCambio={(v) => setB("nota", v)}
+              valor={busqueda.nota} onCambio={(v) => setB("nota", v)} registro={busqueda} set={setB}
               placeholder="Ej.: renquea de una pata de atrás, tiene una manchita blanca en el pecho"
             />
 
@@ -1145,7 +1171,7 @@ export default function App() {
             <NotaLibre
               numero="16" titulo="Qué observaste del animal"
               ayuda="Escríbelo como te salga. Sirve para cruzar con lo que cuente el tutor."
-              valor={reporte.nota} onCambio={(v) => setR("nota", v)}
+              valor={reporte.nota} onCambio={(v) => setR("nota", v)} registro={reporte} set={setR}
               placeholder="Ej.: muy asustadito, se esconde. Tiene el hocico canoso."
             />
 

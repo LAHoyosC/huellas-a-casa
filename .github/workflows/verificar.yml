@@ -1,6 +1,7 @@
 name: Verificar (CI)
 
-# Corre en cada pull request. Solo comprueba que el proyecto compila.
+# Corre en cada pull request. Comprueba que el proyecto compila y que el
+# motor de coincidencias sigue dando lo esperado (scripts/probar-cruce.mjs).
 # NO publica nada: la pagina en produccion no se toca desde aqui.
 # La vista previa de cada PR la genera Cloudflare Pages por su cuenta.
 
@@ -19,6 +20,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm run probar
       - run: npm run build
         env:
           VITE_SUPABASE_URL: https://ci.invalid

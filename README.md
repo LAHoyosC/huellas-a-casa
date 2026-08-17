@@ -40,6 +40,19 @@ y "camina mal" son lo mismo para el sistema. Ese diccionario vive en
 [`src/lib/conceptos.js`](src/lib/conceptos.js) y **lo puede editar cualquiera
 sin saber programar**.
 
+Además, la nota **sugiere casillas**: si alguien escribe "una cocker doradita,
+chiquita" y no marcó raza, color ni tamaño, la página le propone marcarlos
+(Cocker · Beige o crema · Pequeño) y la persona confirma con un toque. Nunca se
+marca solo. Las palabras que reconoce están en
+[`src/lib/sugerencias.js`](src/lib/sugerencias.js), también editable por
+cualquiera.
+
+**Cómo comprobar que el cruce funciona:** `npm run probar` corre una lista de
+casos escritos en español (`scripts/probar-cruce.mjs`) —la cocker contra el
+labrador, la nota negada, pequeño contra grande…— y dice qué porcentaje da
+cada uno y si está dentro de lo esperado. Corre solo en cada PR. Cuando se
+cambie el motor a propósito, se ajustan ahí los rangos, con el motivo.
+
 **La foto no se usa para el cruce.** Es para que el humano confirme. El cotejo
 automático de imágenes falla mucho con animales sucios, mojados y asustados,
 y un porcentaje al lado de una foto hace que la gente le crea al número por
@@ -170,6 +183,8 @@ abrir la ficha. Menos datos móviles para quien busca.
 ```
 src/lib/catalogo.js      Vocabulario cerrado del formulario
 src/lib/conceptos.js     Diccionario de sinónimos  ← editable por cualquiera
+src/lib/sugerencias.js    Palabras de la nota que sugieren casillas  ← editable por cualquiera
+scripts/probar-cruce.mjs Casos de prueba del cruce (npm run probar)
 src/lib/coincidencia.js  Motor de puntaje, duplicados y gemelas
 src/lib/foto.js          Compresión y subida de fotos
 src/App.jsx              Interfaz
