@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { supabase, configurado } from "./lib/supabase.js";
 import { subirFoto, comprimir } from "./lib/foto.js";
-import { entrar, salir, sesionActual, alCambiarSesion } from "./lib/sesion.js";
+import { entrar, salir, sesionActual, alCambiarSesion, pedirRecuperacion, cambiarClave, llegoParaRecuperar } from "./lib/sesion.js";
 import { buscarCoincidencias, posiblesDuplicados, fichasGemelas, empatadosArriba } from "./lib/coincidencia.js";
 import { extraerConceptos, etiquetaDe } from "./lib/conceptos.js";
 import {
@@ -70,6 +70,52 @@ function Entrar({ onListo }) {
   const [clave, setClave] = useState("");
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [olvido, setOlvido] = useState(false);
+  const [enviado, setEnviado] = useState(false);
+
+  async function recuperar(e) {
+    e.preventDefault();
+    setError("");
+    if (!correo) { setError("Escribe tu correo."); return; }
+    setCargando(true);
+    try { await pedirRecuperacion(correo); setEnviado(true); }
+    catch (err) { setError(err.message); }
+    finally { setCargando(false); }
+  }
+
+  if (olvido) {
+    return (
+      <form onSubmit={recuperar} style={{
+      border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco,
+      padding: "24px 24px", maxWidth: 460,
+    }}>
+        <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: ".12em", color: T.verde }}>VOLUNTARIOS</div>
+        <h2 style={{ margin: "8px 0 6px", fontSize: 22, fontWeight: 720, letterSpacing: "-.02em" }}>Recuperar contraseña</h2>
+        {enviado ? (
+          <p style={{ margin: 0, fontSize: 15, lineHeight: 1.55 }}>
+            Te enviamos un correo a <strong>{correo}</strong> con un enlace. Ábrelo y te pedirá la
+            contraseña nueva. Si no llega en unos minutos, revisa la carpeta de spam.
+          </p>
+        ) : (
+          <>
+            <p style={{ margin: "0 0 18px", fontSize: 14.5, color: T.tintaSuave, lineHeight: 1.5 }}>
+              Escribe tu correo y te mandamos un enlace para definir una contraseña nueva.
+            </p>
+            <input style={entradaTexto} type="email" autoComplete="username" placeholder="Correo"
+              value={correo} onChange={(e) => setCorreo(e.target.value)} />
+            {error && <p style={{ margin: "10px 0 0", fontSize: 14, color: T.rojo }}>{error}</p>}
+            <button type="submit" disabled={cargando} style={{
+              marginTop: 16, background: cargando ? T.tintaSuave : T.verde, color: T.blanco, border: "none",
+              borderRadius: 9, padding: "12px 20px", fontSize: 15, fontWeight: 660, cursor: cargando ? "wait" : "pointer",
+            }}>{cargando ? "Enviando…" : "Enviar enlace"}</button>
+          </>
+        )}
+        <p style={{ margin: "16px 0 0", fontSize: 13.5 }}>
+          <a href="#" onClick={(e) => { e.preventDefault(); setOlvido(false); setEnviado(false); setError(""); }} style={{ color: T.verde }}>Volver a iniciar sesión</a>
+        </p>
+      </form>
+    );
+  }
 
   async function enviar(e) {
     e.preventDefault();
@@ -108,6 +154,48 @@ function Entrar({ onListo }) {
         marginTop: 16, background: cargando ? T.tintaSuave : T.verde, color: T.blanco, border: "none",
         borderRadius: 9, padding: "12px 20px", fontSize: 15, fontWeight: 660, cursor: cargando ? "wait" : "pointer",
       }}>{cargando ? "Entrando…" : "Entrar"}</button>
+      <p style={{ margin: "16px 0 0", fontSize: 13.5 }}>
+        <a href="#" onClick={(e) => { e.preventDefault(); setOlvido(true); setError(""); }} style={{ color: T.tintaSuave }}>¿Olvidaste tu contraseña?</a>
+      </p>
+    </form>
+  );
+}
+
+function NuevaClave({ onListo }) {
+  const [clave, setClave] = useState("");
+  const [clave2, setClave2] = useState("");
+  const [error, setError] = useState("");
+  const [cargando, setCargando] = useState(false);
+
+  async function enviar(e) {
+    e.preventDefault();
+    setError("");
+    if (clave.length < 8) { setError("La contraseña debe tener al menos 8 caracteres."); return; }
+    if (clave !== clave2) { setError("Las dos contraseñas no coinciden."); return; }
+    setCargando(true);
+    try { await cambiarClave(clave); onListo(); }
+    catch (err) { setError(err.message); }
+    finally { setCargando(false); }
+  }
+
+  return (
+    <form onSubmit={enviar} style={{
+      border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco,
+      padding: "24px 24px", maxWidth: 460,
+    }}>
+      <div style={{ fontFamily: MONO, fontSize: 12, letterSpacing: ".12em", color: T.verde }}>VOLUNTARIOS</div>
+      <h2 style={{ margin: "8px 0 6px", fontSize: 22, fontWeight: 720, letterSpacing: "-.02em" }}>Define tu contraseña nueva</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+        <input style={entradaTexto} type="password" autoComplete="new-password" placeholder="Contraseña nueva (mínimo 8)"
+          value={clave} onChange={(e) => setClave(e.target.value)} />
+        <input style={entradaTexto} type="password" autoComplete="new-password" placeholder="Repítela"
+          value={clave2} onChange={(e) => setClave2(e.target.value)} />
+      </div>
+      {error && <p style={{ margin: "10px 0 0", fontSize: 14, color: T.rojo }}>{error}</p>}
+      <button type="submit" disabled={cargando} style={{
+        marginTop: 16, background: cargando ? T.tintaSuave : T.verde, color: T.blanco, border: "none",
+        borderRadius: 9, padding: "12px 20px", fontSize: 15, fontWeight: 660, cursor: cargando ? "wait" : "pointer",
+      }}>{cargando ? "Guardando…" : "Guardar contraseña"}</button>
     </form>
   );
 }
@@ -692,7 +780,7 @@ export default function App() {
   const [registros, setRegistros] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState("");
-  const [modo, setModo] = useState("inicio");
+  const [modo, setModo] = useState(() => (llegoParaRecuperar() ? "nueva-clave" : "inicio"));
 
   const [busqueda, setBusqueda] = useState({ senas: [], contacto_medio: "WhatsApp" });
   const [resultados, setResultados] = useState(null);
@@ -959,13 +1047,23 @@ export default function App() {
           </div>
         )}
 
+        {modo === "nueva-clave" && (
+          sesion ? (
+            <NuevaClave onListo={() => { history.replaceState(null, "", window.location.pathname); setModo("lista"); }} />
+          ) : (
+            <div style={{ border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco, padding: "22px 24px", fontSize: 15, lineHeight: 1.6 }}>
+              Verificando el enlace… Si esto no cambia en unos segundos, el enlace venció o ya se usó:
+              vuelve a <a href="#" onClick={(e) => { e.preventDefault(); setModo("entrar"); }} style={{ color: T.verde }}>iniciar sesión</a> y pide otro.
+            </div>
+          )
+        )}
         {modo === "entrar" && !sesion && <Entrar onListo={() => setModo("lista")} />}
         {modo === "entrar" && sesion && (
           <div style={{ border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco, padding: "22px 24px", fontSize: 15, lineHeight: 1.6 }}>
             Ya tienes la sesión iniciada. Ve a <a href="#" onClick={(e) => { e.preventDefault(); setModo("lista"); }} style={{ color: T.verde }}>Ver todos los registros</a>.
           </div>
         )}
-        {sesion && !voluntario && modo !== "entrar" && (
+        {sesion && !voluntario && modo !== "entrar" && modo !== "nueva-clave" && (
           <div style={{
             border: `1.5px solid ${T.ambar}`, background: T.ambarClaro, borderRadius: 11,
             padding: "12px 15px", marginBottom: 18, fontSize: 14.5, lineHeight: 1.5,
