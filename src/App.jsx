@@ -621,6 +621,74 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
   );
 }
 
+// Panel de uso para voluntarios: cuanto entra, cuanto se busca, que hay
+// pendiente. Las busquedas solo las devuelve la base a voluntarios (RLS).
+function Panel({ registros }) {
+  const [busquedas, setBusquedas] = useState(null);
+  useEffect(() => {
+    supabase.from("busquedas").select("creado_en, especie, municipio, contacto_telefono, estado")
+      .order("creado_en", { ascending: false }).limit(2000)
+      .then(({ data }) => setBusquedas(data || []));
+  }, []);
+
+  const hoy = new Date();
+  const dias = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(hoy); d.setDate(hoy.getDate() - (13 - i));
+    return d.toISOString().slice(0, 10);
+  });
+  const porDia = (lista) => {
+    const c = Object.fromEntries(dias.map((d) => [d, 0]));
+    for (const x of lista || []) { const k = (x.creado_en || "").slice(0, 10); if (k in c) c[k]++; }
+    return dias.map((d) => c[d]);
+  };
+  const fichasDia = porDia(registros);
+  const busqDia = porDia(busquedas);
+  const cuenta = (f) => registros.filter(f).length;
+  const desde = (h) => Date.now() - h * 3600000;
+  const n = (v) => <strong style={{ fontWeight: 700, fontSize: 24, display: "block", lineHeight: 1.1 }}>{v}</strong>;
+
+  const Barras = ({ datos, color, titulo }) => {
+    const max = Math.max(1, ...datos);
+    return (
+      <div>
+        <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: ".1em", color: T.tintaSuave, marginBottom: 6 }}>{titulo}</div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 70 }}>
+          {datos.map((v, i) => (
+            <div key={i} title={`${dias[i]}: ${v}`} style={{ flex: 1, background: color, opacity: v ? 1 : 0.18, height: `${Math.max(4, (v / max) * 100)}%`, borderRadius: 3 }} />
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: MONO, fontSize: 10.5, color: T.tintaSuave, marginTop: 4 }}>
+          <span>{dias[0].slice(5)}</span><span>hoy · total 14 días: {datos.reduce((a, b) => a + b, 0)}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const tarjeta = { border: `1px solid ${T.linea}`, borderRadius: 11, background: T.blanco, padding: "12px 14px", fontSize: 13, color: T.tintaSuave };
+  return (
+    <section style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <div style={tarjeta}>{n(cuenta((r) => r.estado === "resguardo"))}en resguardo</div>
+        <div style={{ ...tarjeta, borderColor: T.ambar }}>{n(cuenta((r) => r.estado === "resguardo" && !r.verificado))}sin verificar</div>
+        <div style={tarjeta}>{n(cuenta((r) => r.estado === "reencontrado"))}reencontrados</div>
+        <div style={tarjeta}>{n(cuenta((r) => r.estado === "oculto"))}ocultas</div>
+        <div style={tarjeta}>{n(cuenta((r) => new Date(r.creado_en) > desde(24)))}fichas últimas 24 h</div>
+        <div style={tarjeta}>{n(busquedas ? busquedas.filter((b) => new Date(b.creado_en) > desde(24)).length : "…")}búsquedas últimas 24 h</div>
+        <div style={tarjeta}>{n(busquedas ? busquedas.filter((b) => b.contacto_telefono).length : "…")}búsquedas con contacto para avisar</div>
+        <div style={tarjeta}>{n(cuenta((r) => !r.foto_thumb_url))}fichas sin foto</div>
+      </div>
+      <div style={{ ...tarjeta, display: "grid", gap: 18, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+        <Barras datos={fichasDia} color={T.ambar} titulo="FICHAS NUEVAS POR DÍA" />
+        <Barras datos={busqDia} color={T.verde} titulo="BÚSQUEDAS POR DÍA" />
+      </div>
+      <p style={{ margin: 0, fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
+        Las visitas y las peticiones al servidor no se ven aquí: están en el panel de Cloudflare
+        (Workers & Pages → huellas-a-casa → Metrics) y en el vigía diario del repositorio (Actions → Vigía).
+      </p>
+    </section>
+  );
+}
+
 function Bloque({ titulo, children }) {
   return (
     <div>
@@ -909,6 +977,15 @@ export default function App() {
   const [duplicados, setDuplicados] = useState(null);
   const [avisoFoto, setAvisoFoto] = useState("");
   const [detalleId, setDetalleId] = useState(null);
+
+  // Lleva a la politica de datos (el aviso del inicio) desde cualquier parte.
+  function irAlAviso(e) {
+    if (e) e.preventDefault();
+    setDetalleId(null);
+    setModo("inicio");
+    if (window.location.pathname !== "/") history.replaceState(null, "", "/#aviso");
+    setTimeout(() => document.getElementById("aviso")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
   const [editandoId, setEditandoId] = useState(null);
   const [fueEdicion, setFueEdicion] = useState(false);
   const editando = editandoId ? registros.find((x) => x.id === editandoId) : null;
@@ -978,6 +1055,8 @@ export default function App() {
 
   // Se recarga al entrar o salir un voluntario: cambia lo que la base le deja ver.
   useEffect(() => { cargar(); }, [voluntario?.id]);
+  // Si llegan directo a /#aviso (enlace a la politica de datos), desplazarse ahi.
+  useEffect(() => { if (window.location.hash === "#aviso") setTimeout(() => irAlAviso(), 300); }, []);
   useEffect(() => {
     sesionActual().then(setSesion);
     return alCambiarSesion(setSesion);
@@ -1232,6 +1311,7 @@ export default function App() {
           {btnModo("buscar", "Busco a mi mascota", "Responde y te muestro los parecidos")}
           {btnModo("reportar", "Encontré una mascota", "Para refugios, hogares y voluntarios")}
           {btnModo("lista", "Ver todos los registros", cargando ? "Cargando…" : `${registros.length - ocultas} fichas`)}
+          {voluntario && btnModo("panel", "Panel", "Uso y pendientes")}
         </div>
 
         {errorCarga && (
@@ -1319,7 +1399,7 @@ export default function App() {
 
             <p style={{ margin: "0 0 12px 25px", fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
               Si dejas un contacto, autorizas que los voluntarios lo usen solo para avisarte.{" "}
-              <a href="#aviso" onClick={() => setModo("inicio")} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
+              <a href="/#aviso" onClick={irAlAviso} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
             <button type="button" onClick={buscar} style={{
               background: T.verde, color: T.blanco, border: "none", borderRadius: 10,
@@ -1542,10 +1622,12 @@ export default function App() {
             <p style={{ margin: "12px 0 0 25px", fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
               Al guardar, autorizas que el contacto se publique en la ficha, solo para
               reunir al animal con su familia.{" "}
-              <a href="#aviso" onClick={() => setModo("inicio")} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
+              <a href="/#aviso" onClick={irAlAviso} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
           </section>
         )}
+
+        {modo === "panel" && voluntario && <Panel registros={registros} />}
 
         {modo === "lista" && (
           <section>
@@ -1597,6 +1679,7 @@ export default function App() {
           <span style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".12em", alignSelf: "center" }}>CONTACTO</span>
           <a href={CONTACTO_WHATSAPP} target="_blank" rel="noreferrer" style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_CELULAR}</a>
           <a href={`mailto:${CONTACTO_DATOS}`} style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_DATOS}</a>
+          <a href="/#aviso" onClick={irAlAviso} style={{ color: T.tintaSuave, textDecoration: "underline" }}>Política de datos y quiénes somos</a>
         </div>
       </footer>
       {detalle && (
