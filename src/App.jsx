@@ -1647,10 +1647,19 @@ export default function App() {
             }}>
               Responde solo lo que recuerdes con seguridad. Lo que dejes en blanco no te quita coincidencias.
             </div>
-            <p style={{ margin: "-12px 0 22px", fontSize: 13.5, color: T.tintaSuave }}>
-              ¿Ya buscaste antes y tienes un número BUS-…?{" "}
-              <a href="#" onClick={(e) => { e.preventDefault(); setCasoInicial(""); setModo("caso"); }} style={{ color: T.verde }}>Consulta cómo va tu búsqueda</a>.
-            </p>
+            <div style={{
+              display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px",
+              border: `1.5px solid ${T.verde}`, background: T.blanco, borderRadius: 11,
+              padding: "12px 16px", marginTop: -10, marginBottom: 24,
+            }}>
+              <span style={{ fontSize: 15, flex: 1, minWidth: 200 }}>
+                <strong style={{ fontWeight: 660 }}>¿Ya buscaste antes?</strong> Con tu número BUS-… puedes ver cómo va.
+              </span>
+              <button type="button" onClick={() => { setCasoInicial(""); setModo("caso"); }} style={{
+                background: T.verde, color: T.blanco, border: "none", borderRadius: 9,
+                padding: "11px 16px", fontSize: 15, fontWeight: 660, cursor: "pointer",
+              }}>Consultar mi búsqueda</button>
+            </div>
 
             <Zona v={busqueda} set={setB} numero="01" />
             <Rasgos v={busqueda} set={setB} desde={2} />
