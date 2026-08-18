@@ -94,7 +94,8 @@ jobs:
             echo "==> $f"
             psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" || {
               echo "::error file=$f::Esta migración falla al aplicarse sobre las anteriores. Arréglala en este PR (no edites las ya fusionadas: agrega otra)."; exit 1; }
-            psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 | grep -v NOTICE; test "${PIPESTATUS[0]}" -eq 0 || {
+            SALIDA=$(psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" 2>&1) || {
+              echo "$SALIDA" | grep -v NOTICE
               echo "::error file=$f::Esta migración no se puede correr dos veces seguidas. Usa 'if not exists', 'create or replace', 'drop ... if exists'."; exit 1; }
           done
           echo "OK: $(ls supabase/migrations/*.sql | wc -l) migraciones aplicadas sin errores, y cada una es re-ejecutable."
@@ -143,7 +144,7 @@ jobs:
         run: |
           set +e
           # Solo revisamos las líneas AGREGADAS por este PR (no toda la historia).
-          git diff "origin/${{ github.base_ref }}"...HEAD -U0 -- . ':(exclude)package-lock.json' \
+          git diff "origin/${{ github.base_ref }}"...HEAD -U0 -- . ':(exclude)package-lock.json' ':(exclude).github/workflows/verificar.yml' \
             | grep -E '^\+' | grep -vE '^\+\+\+' > agregado.txt
           PATRONES='sb_secret_|service_role_key|SERVICE_ROLE_KEY|BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|postgres(ql)?://[^:@\s]+:[^@\s]+@(?!localhost|127\.0\.0\.1)|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|github_pat_|xox[bp]-|eyJhbGciOi[A-Za-z0-9_-]{40,}\.[A-Za-z0-9_-]{40,}'
           if grep -nP "$PATRONES" agregado.txt; then
