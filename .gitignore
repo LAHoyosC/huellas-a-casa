@@ -6,3 +6,6 @@ dist
 CONTEXTO.md
 supabase/.temp
 .wrangler
+
+# Permisos personales de Claude Code (los compartidos van en .claude/settings.json)
+.claude/settings.local.json

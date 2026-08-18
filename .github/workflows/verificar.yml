@@ -1,17 +1,46 @@
 name: Verificar (CI)
 
-# Corre en cada pull request. Comprueba que el proyecto compila y que el
-# motor de coincidencias sigue dando lo esperado (scripts/probar-cruce.mjs).
-# NO publica nada: la pagina en produccion no se toca desde aqui.
-# La vista previa de cada PR la genera Cloudflare Pages por su cuenta.
+# Corre en cada pull request hacia main. NO publica nada: producción solo
+# cambia cuando el PR se fusiona (Cloudflare la despliega solo). La vista
+# previa de cada PR la genera Cloudflare por su cuenta, contra staging.
+#
+# Tres trabajos, los tres obligatorios para poder fusionar:
+#
+#   compilar        npm ci, motor de cruce (npm run probar) y build en los
+#                   dos modos (producción y staging), igual que Cloudflare.
+#
+#   base-de-datos   Levanta un Postgres limpio, aplica TODAS las migraciones
+#                   del repo en orden desde cero (si dos PRs chocan o una
+#                   migración está rota, se ve aquí) y comprueba que existan
+#                   todas las columnas y funciones que el código usa
+#                   (scripts/probar-esquema.mjs).
+#
+#   revisar         Reglas del repo: sin secretos, migraciones solo se
+#                   agregan (nunca se editan ni borran), sin archivos
+#                   generados, aviso si el PR toca archivos delicados.
+#
+# Hay un cuarto check, en aprobacion.yml: si el PR toca archivos delicados
+# (scripts/ci/delicados.txt) exige la aprobación de Lau; si no, pasa solo.
+# Con los cuatro en verde el PR se fusiona (auto-merge, squash).
+#
+# Si algo falla, el mensaje dice qué y cómo arreglarlo. Léelo antes de
+# tocar nada.
 
 on:
   pull_request:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: verificar-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   compilar:
+    name: compilar
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,8 +49,146 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run probar
-      - run: npm run build
+      - name: Motor de cruce (casos en scripts/probar-cruce.mjs)
+        run: npm run probar
+      - name: Compilar como producción (main)
+        run: npm run build
+      - name: Compilar como staging (cualquier otra rama)
+        run: npm run build
         env:
-          VITE_SUPABASE_URL: https://ci.invalid
-          VITE_SUPABASE_ANON_KEY: ci
+          WORKERS_CI_BRANCH: vista-previa
+
+  base-de-datos:
+    name: base-de-datos
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: huellas
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      URL: postgresql://postgres:ci@localhost:5432/huellas
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar psql
+        run: sudo apt-get install -y -q postgresql-client >/dev/null
+
+      - name: Preparar lo mínimo de Supabase (roles, auth, storage)
+        run: psql "$URL" -X -v ON_ERROR_STOP=1 -q -f scripts/ci/supabase-minimo.sql
+
+      - name: Aplicar TODAS las migraciones en orden, desde cero
+        run: |
+          set -e
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            echo "==> $f"
+            psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" || {
+              echo "::error file=$f::Esta migración falla al aplicarse sobre las anteriores. Arréglala en este PR (no edites las ya fusionadas: agrega otra)."; exit 1; }
+          done
+          echo "OK: $(ls supabase/migrations/*.sql | wc -l) migraciones aplicadas sin errores."
+
+      - name: Aplicarlas otra vez (deben ser re-ejecutables sin romperse)
+        run: |
+          set -e
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" || {
+              echo "::error file=$f::Esta migración no se puede correr dos veces. Usa 'if not exists', 'create or replace', 'drop ... if exists'."; exit 1; }
+          done
+          echo "OK: todas las migraciones son idempotentes."
+
+      - name: El código encuentra todas sus columnas y funciones
+        run: |
+          psql "$URL" -X -A -t -c "$(node scripts/probar-esquema.mjs --consulta)" > esquema.txt
+          node scripts/probar-esquema.mjs esquema.txt
+
+  revisar:
+    name: revisar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Qué archivos cambia este PR
+        id: cambios
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          git diff --name-status "$BASE"...HEAD > cambios.txt
+          cat cambios.txt
+          echo "n=$(wc -l < cambios.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Migraciones solo se AGREGAN (nunca se editan ni borran)
+        run: |
+          MAL=$(awk '$1 != "A" && $2 ~ /^supabase\/migrations\//' cambios.txt || true)
+          if [ -n "$MAL" ]; then
+            echo "$MAL"
+            echo "::error::Una migración ya existente fue modificada o borrada. Las migraciones fusionadas ya corrieron en producción: no se tocan. Deshaz el cambio y agrega una migración NUEVA con el siguiente número."
+            exit 1
+          fi
+          # Las nuevas tienen que venir con el formato y con número mayor que todas las que ya hay.
+          ULT=$(git ls-tree -r --name-only "origin/${{ github.base_ref }}" supabase/migrations | sort | tail -1 | xargs -r basename)
+          for f in $(awk '$1 == "A" && $2 ~ /^supabase\/migrations\// {print $2}' cambios.txt); do
+            b=$(basename "$f")
+            echo "$b" | grep -Eq '^[0-9]{14}_[a-z0-9_]+\.sql$' || { echo "::error file=$f::Nombre inválido. Formato: YYYYMMDDNNNNNN_nombre_en_minusculas.sql"; exit 1; }
+            if [ -n "$ULT" ] && [ "$b" \< "$ULT" ]; then
+              echo "::error file=$f::La migración nueva ($b) tiene un número menor que la última ya fusionada ($ULT). Renómbrala con un número mayor."; exit 1
+            fi
+          done
+          echo "OK"
+
+      - name: Sin secretos ni credenciales
+        run: |
+          set +e
+          # Solo revisamos las líneas AGREGADAS por este PR (no toda la historia).
+          git diff "origin/${{ github.base_ref }}"...HEAD -U0 -- . ':(exclude)package-lock.json' \
+            | grep -E '^\+' | grep -vE '^\+\+\+' > agregado.txt
+          PATRONES='sb_secret_|service_role_key|SERVICE_ROLE_KEY|BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY|postgres(ql)?://[^:@\s]+:[^@\s]+@(?!localhost|127\.0\.0\.1)|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{30,}|github_pat_|xox[bp]-|eyJhbGciOi[A-Za-z0-9_-]{40,}\.[A-Za-z0-9_-]{40,}'
+          if grep -nP "$PATRONES" agregado.txt; then
+            echo "::error::Parece que este PR agrega un secreto (llave privada, service_role, URL de base con contraseña, token…). Los secretos van en GitHub → Settings → Secrets, nunca en el código. Si es un falso positivo, dilo en el PR."
+            exit 1
+          fi
+          # Archivos que nunca deben entrar.
+          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD | grep -E '(^|/)\.env(\.local)?$'; then
+            echo "::error::Se está subiendo un archivo .env o .env.local. Está en .gitignore por algo: sácalo del commit."
+            exit 1
+          fi
+          echo "OK: sin secretos en lo agregado."
+
+      - name: Sin archivos generados
+        run: |
+          if grep -E '^[AM]\s+(dist/|worker/entorno\.js|node_modules/)' cambios.txt; then
+            echo "::error::dist/, node_modules/ y worker/entorno.js se generan al compilar; no van en el PR. Sácalos del commit (git checkout origin/main -- worker/entorno.js)."
+            exit 1
+          fi
+          echo "OK"
+
+      - name: Aviso si toca archivos delicados (necesitan aprobación de Lau)
+        run: |
+          tr -d '' < scripts/ci/delicados.txt | grep -vE '^\s*(#|$)' > patrones.txt
+          : > delicados.txt
+          while read -r ruta; do
+            if [[ "$ruta" == */ ]]; then awk '{print $2}' cambios.txt | grep -E "^${ruta}" >> delicados.txt || true
+            else awk '{print $2}' cambios.txt | grep -Fx "$ruta" >> delicados.txt || true; fi
+          done < patrones.txt
+          if [ -s delicados.txt ]; then
+            echo "::warning::Este PR toca archivos delicados (ver scripts/ci/delicados.txt). No es un error, pero NO se fusiona solo: necesita la aprobación de Lau (check «aprobacion»). Explica en el PR por qué."
+            sort -u delicados.txt | sed 's/^/  - /'
+          else
+            echo "OK: no toca archivos delicados. Con el CI en verde se puede fusionar solo (auto-merge)."
+          fi
+
+      - name: Dependencias nuevas
+        run: |
+          if grep -qE '^M\s+package\.json' cambios.txt; then
+            if git diff "origin/${{ github.base_ref }}"...HEAD -- package.json | grep -E '^\+\s+"[^"]+":\s*"[\^~0-9]' ; then
+              echo "::warning::package.json agrega o cambia dependencias. Justifícalo en el PR (hoy son solo react, react-dom y supabase-js)."
+            fi
+          fi
+          echo "OK"

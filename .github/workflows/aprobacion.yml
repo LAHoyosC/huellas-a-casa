@@ -1,0 +1,88 @@
+name: Aprobación (archivos delicados)
+
+# Puerta de seguridad, además de CODEOWNERS (dos candados distintos, por si
+# uno falla). Un PR que toca archivos DELICADOS (scripts/ci/delicados.txt:
+# base de datos, despliegue, permisos, dependencias, motor de cruce) solo
+# puede fusionarse si Lau lo aprobó en su versión actual. Un PR que no toca
+# nada delicado pasa solo, y con el resto del CI en verde se fusiona por
+# auto-merge sin esperar a nadie.
+#
+# Se vuelve a evaluar cada vez que alguien aprueba o hace push, así el
+# check se pone en verde en cuanto Lau aprueba.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: aprobacion-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  aprobacion:
+    name: aprobacion
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: ¿Toca archivos delicados?
+        id: delicados
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only "$BASE" "$HEAD" > cambios.txt
+          tr -d '' < scripts/ci/delicados.txt | grep -vE '^\s*(#|$)' > patrones.txt
+          : > delicados.txt
+          while read -r ruta; do
+            if [[ "$ruta" == */ ]]; then grep -E "^${ruta}" cambios.txt >> delicados.txt || true
+            else grep -Fx "$ruta" cambios.txt >> delicados.txt || true; fi
+          done < patrones.txt
+          sort -u delicados.txt -o delicados.txt
+          if [ -s delicados.txt ]; then
+            echo "Este PR toca archivos delicados:"; sed 's/^/  - /' delicados.txt
+            echo "hay=si" >> "$GITHUB_OUTPUT"
+          else
+            echo "No toca nada delicado: puede fusionarse solo cuando el CI esté en verde."
+            echo "hay=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: ¿Lau aprobó esta versión?
+        # Si el PR lo abrió la propia Lau, no hay a quién pedirle aprobación:
+        # pasa (GitHub no deja aprobarse a uno mismo).
+        if: steps.delicados.outputs.hay == 'si' && github.event.pull_request.user.login != 'LAHoyosC'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          DUENA: LAHoyosC
+        run: |
+          # Última reseña de Lau; tiene que ser APPROVED y sobre el commit actual
+          # (si hubo push después de aprobar, la aprobación ya no vale).
+          ULTIMA=$(gh api "repos/${{ github.repository }}/pulls/$PR/reviews" --paginate \
+            --jq "[.[] | select(.user.login == \"$DUENA\") | select(.state == \"APPROVED\" or .state == \"CHANGES_REQUESTED\" or .state == \"DISMISSED\")] | last | \"\(.state) \(.commit_id)\"")
+          echo "Última reseña de $DUENA: ${ULTIMA:-ninguna}"
+          if [ "$ULTIMA" = "APPROVED $HEAD" ]; then
+            echo "OK: aprobado por $DUENA en la versión actual."
+          else
+            {
+              echo "### 🔒 Este PR necesita la aprobación de @$DUENA"
+              echo
+              echo "Toca archivos delicados (no se arreglan con un Revert):"
+              sed 's/^/- `/; s/$/`/' delicados.txt
+              echo
+              echo "Explica en la descripción por qué. Cuando @$DUENA apruebe, este check se pone en verde solo."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Este PR toca archivos delicados y necesita la aprobación de @$DUENA sobre el commit actual ($HEAD). No es un error de tu código: es la regla. Explica el cambio en el PR y espera la aprobación."
+            exit 1
+          fi
