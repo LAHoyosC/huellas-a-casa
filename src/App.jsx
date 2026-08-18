@@ -1421,6 +1421,7 @@ export default function App() {
 
   function editarFicha(r) {
     setReporte({ ...soloCampos(r), senas: r.senas || [] });
+    setSitioOtro(!r.refugio_id && !!(r.lugar || r.custodio));
     setMostrarMapa(!!r.lugar_mapa);
     setArchivoFoto(null);
     setEditandoId(r.id);
@@ -1436,6 +1437,7 @@ export default function App() {
     setEditandoId(null);
     setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
     setMostrarMapa(false);
+    setSitioOtro(false);
     setArchivoFoto(null);
     setModo("lista");
   }
@@ -1446,6 +1448,9 @@ export default function App() {
   const verFicha = (r) => { setDetalleId(r.id); history.replaceState(null, "", `/m/${encodeURIComponent(r.codigo)}`); };
   const cerrarFicha = () => { setDetalleId(null); history.replaceState(null, "", "/"); };
   const [mostrarMapa, setMostrarMapa] = useState(false);
+  // "¿Dónde está ahora?": nada elegido aún, un refugio de la lista, u «otro
+  // sitio» (ahí sí se piden tipo y nombre a mano).
+  const [sitioOtro, setSitioOtro] = useState(false);
   const [sesion, setSesion] = useState(null);
   const voluntario = sesion?.voluntario || null;
 
@@ -1676,6 +1681,7 @@ export default function App() {
       setGuardado(data.codigo);
       setFueEdicion(false);
       setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+      setSitioOtro(false);
       setMostrarMapa(false);
       setArchivoFoto(null);
     } catch (e) {
@@ -1710,6 +1716,7 @@ export default function App() {
       setFueEdicion(true);
       setEditandoId(null);
       setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+      setSitioOtro(false);
       setMostrarMapa(false);
       setArchivoFoto(null);
     } catch (e) {
@@ -2074,30 +2081,35 @@ export default function App() {
             <Campo numero="13" titulo="¿Dónde está ahora?"
               ayuda={refugiosActivos.length ? "Si está en un refugio de la lista, elígelo: la ficha se llena sola con el municipio, cómo llegar y el contacto. Si no, elige «Otro sitio»." : undefined}>
               {refugiosActivos.length > 0 && (
-                <select value={reporte.refugio_id || ""} style={{ ...entradaTexto, marginBottom: 10 }}
+                <select value={reporte.refugio_id || (sitioOtro ? "otro" : "")} style={{ ...entradaTexto, marginBottom: 10 }}
                   onChange={(e) => {
-                    const ref = refugioDe(e.target.value);
+                    const v = e.target.value;
+                    if (v === "otro") { setSitioOtro(true); setReporte((p) => fichaDesdeRefugio(p, null)); return; }
+                    const ref = refugioDe(v);
+                    setSitioOtro(false);
                     setReporte((p) => fichaDesdeRefugio(p, ref));
                     if (ref?.lugar_mapa) setMostrarMapa(true);
                   }}>
-                  <option value="">Otro sitio (no está en la lista)</option>
+                  <option value="">Elige el refugio o sitio…</option>
                   {refugiosActivos.map((x) => (
                     <option key={x.id} value={x.id}>{x.nombre}{x.municipio ? ` — ${x.municipio}` : ""}</option>
                   ))}
+                  <option value="otro">Otro sitio (no está en la lista)</option>
                 </select>
               )}
-              {reporte.refugio_id ? (
+              {reporte.refugio_id && (
                 <p style={{ margin: "0 0 4px", fontSize: 13.5, color: T.tintaSuave, lineHeight: 1.5 }}>
                   {refugioDe(reporte.refugio_id)?.tipo}
                   {refugioDe(reporte.refugio_id)?.direccion ? ` · ${refugioDe(reporte.refugio_id).direccion}` : ""}
                   {" "}— se llenó lo que el refugio ya tiene; puedes ajustar lo que haga falta.
                 </p>
-              ) : (
+              )}
+              {(sitioOtro || refugiosActivos.length === 0) && (
                 CUSTODIO.map((o) => <Opcion key={o} activo={reporte.custodio === o} onClick={() => setR("custodio", o)}>{o}</Opcion>)
               )}
             </Campo>
 
-            {!reporte.refugio_id && (
+            {(sitioOtro || refugiosActivos.length === 0) && (
               <Campo numero="14" titulo="Nombre del refugio o del sitio" opcional
                 ayuda="Escríbelo como se llame. Un voluntario puede después convertirlo en refugio de la lista.">
                 <input style={entradaTexto} value={reporte.lugar || ""}
@@ -2168,6 +2180,8 @@ export default function App() {
                   <button type="button" onClick={() => {
                     setDuplicados(null);
                     setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
+                    setSitioOtro(false);
+      setSitioOtro(false);
       setMostrarMapa(false);
                     setArchivoFoto(null);
                     window.scrollTo({ top: 0, behavior: "smooth" });
