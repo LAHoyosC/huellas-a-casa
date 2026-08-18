@@ -1663,7 +1663,7 @@ export default function App() {
             />
 
             <Campo numero="11b" titulo="Foto de tu mascota"
-              ayuda="No se usa para buscar (el cruce es por los datos). Sirve para que los voluntarios la comparen a ojo con los animales que llegan. Solo la ven ellos y tú con tu número de registro." opcional>
+              ayuda="El algoritmo no la usa para buscar (el cruce es por los datos), pero los voluntarios sí: la comparan a ojo con los animales que llegan. Solo la ven ellos y tú con tu número de registro." opcional>
               <CargarFoto archivo={fotoBusqueda} onArchivo={setFotoBusqueda} sinCamara />
             </Campo>
 
