@@ -5,6 +5,9 @@
 // - /api/fotos/* y /fotos/* los atiende worker/index.js: sube y sirve las
 //   fotos desde el bucket R2 "huellas-fotos". R2 da 10 GB gratis y la
 //   salida de datos no se cobra nunca, asi que ver fotos no gasta cuota.
+// - /m/<codigo> tambien lo atiende el Worker: devuelve la pagina con la
+//   foto y los datos de esa ficha en las etiquetas de vista previa, para
+//   que al compartir el enlace por WhatsApp salga la imagen del animal.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "huellas-a-casa",
@@ -12,8 +15,9 @@
   "compatibility_date": "2026-08-01",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/fotos/*"]
+    "run_worker_first": ["/api/*", "/fotos/*", "/m/*"]
   },
   "r2_buckets": [
     { "binding": "FOTOS", "bucket_name": "huellas-fotos" }

@@ -50,6 +50,29 @@ export const COLOR_VECINO = {
   "Blanco con manchas": ["Blanco", "Tricolor"],
 };
 
+// Raza aparente, solo para perros. Es lo que mas discrimina cuando
+// se sabe ("es un cocker"), pero mucha gente no lo sabe: por eso es
+// opcional y "Criollo o mestizo" no se cruza contra nada (puede parecerse
+// a cualquier raza). Lista corta, con las razas mas comunes en la region.
+export const RAZA = [
+  "Criollo o mestizo",
+  "Cocker",
+  "Poodle o French",
+  "Pinscher",
+  "Chihuahua",
+  "Schnauzer",
+  "Shih tzu o Maltés",
+  "Beagle",
+  "Labrador o Golden",
+  "Pastor alemán",
+  "Pitbull o Bully",
+  "Husky",
+  "Bulldog",
+  "Otra raza",
+];
+// Estas dos no dicen cual: no cuentan como coincidencia ni como diferencia.
+export const RAZA_INDEFINIDA = ["Criollo o mestizo", "Otra raza"];
+
 export const PELO = ["Corto", "Medio", "Largo"];
 export const SEXO = ["Macho", "Hembra", "No sé"];
 export const EDAD = ["Cachorro", "Joven", "Adulto", "Mayor"];
