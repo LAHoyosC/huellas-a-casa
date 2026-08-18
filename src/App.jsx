@@ -98,10 +98,34 @@ function CampoContacto({ medio, valor, onMedio, onValor, placeholderNombre }) {
 // solo se envian estos: nunca id, codigo, estado, verificado ni fechas.
 const CAMPOS_FICHA = [
   "especie", "tamano", "color", "pelo", "sexo", "edad", "orejas", "cola", "senas", "senas_donde", "collar_color",
-  "departamento", "municipio", "barrio", "fecha_hallazgo", "custodio", "lugar",
+  "departamento", "municipio", "barrio", "fecha_hallazgo", "custodio", "lugar", "refugio_id",
   "contacto_nombre", "contacto_telefono", "contacto_medio", "nota", "lugar_mapa", "fuente_url",
 ];
 const soloCampos = (obj) => Object.fromEntries(CAMPOS_FICHA.map((k) => [k, obj[k] ?? null]));
+
+// Campos de un refugio que se escriben desde el panel de voluntarios.
+const CAMPOS_REFUGIO = [
+  "nombre", "tipo", "departamento", "municipio", "barrio", "direccion", "lugar_mapa",
+  "contacto_telefono", "contacto_medio", "responsable", "notas", "activo",
+];
+const soloCamposRefugio = (obj) => Object.fromEntries(CAMPOS_REFUGIO.map((k) => [k, obj[k] ?? null]));
+
+// Al elegir un refugio, la ficha se llena sola con lo que el refugio ya
+// tiene: donde esta, como llegar y a quien escribir. Lo que la persona ya
+// habia escrito en la ficha se respeta salvo el sitio mismo.
+function fichaDesdeRefugio(reporte, ref) {
+  if (!ref) return { ...reporte, refugio_id: null };
+  const r = { ...reporte, refugio_id: ref.id, custodio: ref.tipo, lugar: ref.nombre };
+  if (ref.departamento) { r.departamento = ref.departamento; }
+  if (ref.municipio) { r.municipio = ref.municipio; }
+  if (ref.barrio && !reporte.barrio) r.barrio = ref.barrio;
+  if (ref.lugar_mapa) r.lugar_mapa = ref.lugar_mapa;
+  if (ref.contacto_telefono && !reporte.contacto_telefono) {
+    r.contacto_telefono = ref.contacto_telefono;
+    r.contacto_medio = ref.contacto_medio || "WhatsApp";
+  }
+  return r;
+}
 
 const botonSecundario = (color) => ({
   background: "transparent", border: `1.5px solid ${color === T.verde ? T.verde : T.linea}`,
@@ -634,7 +658,153 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
 
 // Panel de uso para voluntarios: cuanto entra, cuanto se busca, que hay
 // pendiente. Las busquedas solo las devuelve la base a voluntarios (RLS).
-function Panel({ registros, voluntario, acciones }) {
+// Refugios en el panel de voluntarios: la lista con cuantas fichas tiene
+// cada uno, agregar y editar, y las fichas cuyo sitio quedo escrito a mano
+// para asignarlas a un refugio (o crear uno con ese nombre).
+function Refugios({ refugios, registros, voluntario, onGuardar, onAsignar, acciones }) {
+  const [editando, setEditando] = useState(null);   // null = cerrado; {} = nuevo; {id,...} = editar
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+  const [verSueltas, setVerSueltas] = useState(false);
+  const setE = (k, v) => setEditando((p) => ({ ...p, [k]: v }));
+
+  const enResguardo = registros.filter((r) => r.estado === "resguardo");
+  const cuenta = (id) => enResguardo.filter((r) => r.refugio_id === id).length;
+  // Fichas en resguardo con sitio escrito a mano y sin refugio asignado.
+  const sueltas = enResguardo.filter((r) => !r.refugio_id && (r.lugar || "").trim());
+
+  async function guardar() {
+    setGuardando(true);
+    const e = await onGuardar(editando, editando.id);
+    setGuardando(false);
+    if (e) { setError(e); return; }
+    setError(""); setEditando(null);
+  }
+  const nuevoDesde = (r) => setEditando({
+    nombre: r.lugar.trim(), tipo: r.custodio || "Refugio", departamento: r.departamento, municipio: r.municipio,
+    barrio: r.barrio, lugar_mapa: r.lugar_mapa, contacto_telefono: r.contacto_telefono, contacto_medio: r.contacto_medio, activo: true,
+  });
+
+  return (
+    <div style={{ border: `1px solid ${T.linea}`, borderRadius: 11, background: T.blanco, padding: "14px 16px", display: "grid", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".12em", color: T.tintaSuave }}>REFUGIOS · {refugios.length}</div>
+        <button type="button" onClick={() => { setEditando({ tipo: "Refugio", contacto_medio: "WhatsApp", activo: true, departamento: "Risaralda" }); setError(""); }}
+          style={botonSecundario(T.verde)}>+ Agregar refugio</button>
+      </div>
+      <p style={{ margin: "-6px 0 0", fontSize: 13.5, color: T.tintaSuave, lineHeight: 1.5 }}>
+        Al registrar una mascota se elige el refugio y la ficha se llena sola con lo que esté aquí. Un refugio que cierra se marca inactivo; nada se borra.
+      </p>
+
+      {refugios.length === 0 && <p style={{ margin: 0, color: T.tintaSuave, fontSize: 14 }}>Todavía no hay refugios. Agrega el primero.</p>}
+      <div style={{ display: "grid", gap: 8 }}>
+        {refugios.map((x) => (
+          <div key={x.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 12px", border: `1px solid ${T.linea}`, borderRadius: 10, opacity: x.activo ? 1 : 0.55 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 640, fontSize: 15 }}>{x.nombre} {!x.activo && <span style={{ fontFamily: MONO, fontSize: 11, color: T.tintaSuave }}>INACTIVO</span>}</div>
+              <div style={{ fontSize: 13, color: T.tintaSuave }}>
+                {[x.tipo, x.municipio, x.barrio].filter(Boolean).join(" · ")}
+                {x.contacto_telefono ? ` · ${x.contacto_medio || "WhatsApp"}: ${x.contacto_telefono}` : " · sin contacto"}
+                {x.lugar_mapa ? " · con mapa" : ""}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+              <span style={{ fontFamily: MONO, fontSize: 12, color: T.tintaSuave }}>{cuenta(x.id)} en resguardo</span>
+              <button type="button" onClick={() => { setEditando({ ...x }); setError(""); }} style={botonSecundario(T.tinta)}>Editar</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {editando && (
+        <div style={{ border: `1.5px solid ${T.verde}`, borderRadius: 12, padding: "16px 18px", display: "grid", gap: 12 }}>
+          <div style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".12em", color: T.verde }}>{editando.id ? "EDITAR REFUGIO" : "NUEVO REFUGIO"}</div>
+          <label style={{ fontSize: 13.5 }}>Nombre
+            <input style={entradaTexto} value={editando.nombre || ""} onChange={(e) => setE("nombre", e.target.value)} placeholder="Ej.: Albergue Gestora Social de Risaralda" />
+          </label>
+          <div>
+            <div style={{ fontSize: 13.5, marginBottom: 6 }}>Tipo</div>
+            {CUSTODIO.map((o) => <Opcion key={o} activo={editando.tipo === o} onClick={() => setE("tipo", o)}>{o}</Opcion>)}
+          </div>
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+            <label style={{ fontSize: 13.5 }}>Departamento
+              <select style={entradaTexto} value={editando.departamento || ""} onChange={(e) => { setE("departamento", e.target.value); setE("municipio", ""); }}>
+                <option value="">—</option>
+                {Object.keys(MUNICIPIOS).map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </label>
+            <label style={{ fontSize: 13.5 }}>Municipio
+              <select style={entradaTexto} value={editando.municipio || ""} onChange={(e) => setE("municipio", e.target.value)}>
+                <option value="">—</option>
+                {(MUNICIPIOS[editando.departamento] || []).map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </label>
+            <label style={{ fontSize: 13.5 }}>Barrio
+              <input style={entradaTexto} value={editando.barrio || ""} onChange={(e) => setE("barrio", e.target.value)} />
+            </label>
+          </div>
+          <label style={{ fontSize: 13.5 }}>Dirección (se muestra en la ficha)
+            <input style={entradaTexto} value={editando.direccion || ""} onChange={(e) => setE("direccion", e.target.value)} placeholder="Ej.: Av. Las Américas, Calle 95 lote 1" />
+          </label>
+          <label style={{ fontSize: 13.5 }}>Enlace de Google Maps (cómo llegar)
+            <input style={entradaTexto} inputMode="url" value={editando.lugar_mapa || ""} onChange={(e) => setE("lugar_mapa", e.target.value)} placeholder="https://maps.app.goo.gl/…" />
+          </label>
+          <div>
+            <div style={{ fontSize: 13.5, marginBottom: 6 }}>Contacto público (el que ve el tutor en las fichas de este refugio)</div>
+            <CampoContacto medio={editando.contacto_medio || "WhatsApp"} valor={editando.contacto_telefono}
+              onMedio={(m) => setE("contacto_medio", m)} onValor={(v) => setE("contacto_telefono", v)} />
+          </div>
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+            <label style={{ fontSize: 13.5 }}>Responsable (solo voluntarios lo ven aquí)
+              <input style={entradaTexto} value={editando.responsable || ""} onChange={(e) => setE("responsable", e.target.value)} />
+            </label>
+            <label style={{ fontSize: 13.5 }}>Notas
+              <input style={entradaTexto} value={editando.notas || ""} onChange={(e) => setE("notas", e.target.value)} maxLength={500} />
+            </label>
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <Opcion activo={editando.activo !== false} onClick={() => setE("activo", true)}>Activo</Opcion>
+            <Opcion activo={editando.activo === false} onClick={() => setE("activo", false)}>Inactivo (cerró)</Opcion>
+          </div>
+          {error && <p style={{ margin: 0, color: T.rojo, fontSize: 14 }}>{error}</p>}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button type="button" onClick={guardar} disabled={guardando} style={{ background: T.verde, color: T.blanco, border: "none", borderRadius: 9, padding: "10px 16px", fontSize: 14.5, fontWeight: 640, cursor: "pointer" }}>
+              {guardando ? "Guardando…" : "Guardar"}
+            </button>
+            <button type="button" onClick={() => setEditando(null)} style={botonSecundario(T.tinta)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {sueltas.length > 0 && (
+        <div style={{ borderTop: `1px solid ${T.linea}`, paddingTop: 12 }}>
+          <button type="button" onClick={() => setVerSueltas((v) => !v)} style={{ ...botonSecundario(T.tinta), width: "100%", textAlign: "left" }}>
+            {verSueltas ? "▲" : "▼"} {sueltas.length} ficha{sueltas.length > 1 ? "s" : ""} en resguardo con el sitio escrito a mano (sin refugio asignado)
+          </button>
+          {verSueltas && (
+            <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+              {sueltas.map((r) => (
+                <div key={r.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", padding: "8px 10px", border: `1px solid ${T.linea}`, borderRadius: 10, fontSize: 13.5 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 12 }}>{r.codigo}</span>
+                  <span style={{ flex: 1, minWidth: 160 }}>«{r.lugar}»{r.municipio ? ` · ${r.municipio}` : ""}</span>
+                  <select style={{ ...entradaTexto, maxWidth: 240, padding: "8px 10px", minHeight: 38 }} defaultValue=""
+                    onChange={(e) => { if (e.target.value) onAsignar(r, e.target.value); }}>
+                    <option value="">Asignar a…</option>
+                    {refugios.filter((x) => x.activo).map((x) => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+                  </select>
+                  <button type="button" onClick={() => { nuevoDesde(r); setError(""); window.scrollTo({ top: window.scrollY, behavior: "smooth" }); }} style={botonSecundario(T.verde)}>Crear refugio con este nombre</button>
+                  <button type="button" onClick={() => acciones.onVer(r)} style={botonSecundario(T.tinta)}>Ver ficha</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Panel({ registros, voluntario, acciones, refugios, onGuardarRefugio, onAsignarRefugio }) {
   const [busquedas, setBusquedas] = useState(null);
   // Que tarjeta esta desplegada (su lista se muestra debajo de las tarjetas).
   const [abierta, setAbierta] = useState(null);
@@ -734,6 +904,9 @@ function Panel({ registros, voluntario, acciones }) {
           ))}
         </div>
       )}
+      <Refugios refugios={refugios} registros={registros} voluntario={voluntario}
+        onGuardar={onGuardarRefugio} onAsignar={onAsignarRefugio} acciones={acciones} />
+
       <div style={{ ...tarjeta, display: "grid", gap: 18, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
         <Barras datos={fichasDia} color={T.ambar} titulo="FICHAS NUEVAS POR DÍA" />
         <Barras datos={busqDia} color={T.verde} titulo="BÚSQUEDAS POR DÍA" />
@@ -1259,6 +1432,14 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // Un voluntario con refugio propio arranca la ficha nueva ahi (solo si el
+  // formulario esta en blanco: no pisa una edicion ni algo ya elegido).
+  useEffect(() => {
+    if (modo !== "reportar" || editandoId || reporte.refugio_id !== undefined) return;
+    const ref = voluntario?.refugio_id ? refugioDe(voluntario.refugio_id) : null;
+    if (ref) { setReporte((p) => fichaDesdeRefugio(p, ref)); if (ref.lugar_mapa) setMostrarMapa(true); }
+  }, [modo, editandoId, voluntario?.refugio_id, refugios.length]);
+
   function cancelarEdicion() {
     setEditandoId(null);
     setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
@@ -1278,6 +1459,40 @@ export default function App() {
 
   const [filtroEspecie, setFiltroEspecie] = useState("");
   const [filtroMuni, setFiltroMuni] = useState("");
+  const [filtroRefugio, setFiltroRefugio] = useState("");
+  // Refugios: el publico recibe los activos; los voluntarios, todos (RLS).
+  const [refugios, setRefugios] = useState([]);
+  async function cargarRefugios() {
+    const { data } = await supabase.from("refugios").select("*").order("nombre");
+    setRefugios(data || []);
+  }
+  useEffect(() => { cargarRefugios(); }, [voluntario?.id]);
+  const refugiosActivos = refugios.filter((x) => x.activo);
+  const refugioDe = (id) => refugios.find((x) => x.id === id) || null;
+
+  // Guardar (crear o editar) un refugio desde el panel. Solo voluntarios (RLS).
+  async function guardarRefugio(datos, id) {
+    const fila = soloCamposRefugio(datos);
+    fila.nombre = (fila.nombre || "").trim();
+    if (fila.nombre.length < 2) return "Escribe el nombre del refugio.";
+    if (fila.lugar_mapa && !esEnlaceMapa(fila.lugar_mapa)) return "El enlace de mapa no parece de Google Maps.";
+    if (fila.activo === null) fila.activo = true;
+    if (!fila.contacto_medio) fila.contacto_medio = "WhatsApp";
+    const q = id ? supabase.from("refugios").update(fila).eq("id", id) : supabase.from("refugios").insert([fila]);
+    const { error } = await q;
+    if (error) return /idx_refugios_nombre|duplicate/i.test(error.message || "") ? "Ya hay un refugio con ese nombre." : "No se pudo guardar el refugio.";
+    await cargarRefugios();
+    return "";
+  }
+
+  // Asignar una ficha (con el sitio escrito a mano) a un refugio.
+  async function asignarRefugio(r, refugioId) {
+    const ref = refugioDe(refugioId);
+    const cambios = ref ? { refugio_id: ref.id, custodio: ref.tipo, lugar: ref.nombre } : { refugio_id: null };
+    const { error } = await supabase.from("mascotas").update(cambios).eq("id", r.id);
+    if (error) { alert("No se pudo asignar el refugio."); return; }
+    setRegistros((p) => p.map((x) => (x.id === r.id ? { ...x, ...cambios } : x)));
+  }
   const [verOcultas, setVerOcultas] = useState(false);
 
   const setB = (k, v) => setBusqueda((p) => ({ ...p, [k]: v }));
@@ -1508,8 +1723,9 @@ export default function App() {
     () => registros.filter((r) =>
       (verOcultas ? r.estado === "oculto" : r.estado !== "oculto") &&
       (!filtroEspecie || r.especie === filtroEspecie) &&
-      (!filtroMuni || r.municipio === filtroMuni)),
-    [registros, filtroEspecie, filtroMuni, verOcultas]
+      (!filtroMuni || r.municipio === filtroMuni) &&
+      (!filtroRefugio || r.refugio_id === filtroRefugio)),
+    [registros, filtroEspecie, filtroMuni, filtroRefugio, verOcultas]
   );
 
   const municipiosConRegistro = useMemo(
@@ -1855,14 +2071,39 @@ export default function App() {
                 value={reporte.fecha_hallazgo || ""} onChange={(e) => setR("fecha_hallazgo", e.target.value)} />
             </Campo>
 
-            <Campo numero="13" titulo="¿Dónde está ahora?">
-              {CUSTODIO.map((o) => <Opcion key={o} activo={reporte.custodio === o} onClick={() => setR("custodio", o)}>{o}</Opcion>)}
+            <Campo numero="13" titulo="¿Dónde está ahora?"
+              ayuda={refugiosActivos.length ? "Si está en un refugio de la lista, elígelo: la ficha se llena sola con el municipio, cómo llegar y el contacto. Si no, elige «Otro sitio»." : undefined}>
+              {refugiosActivos.length > 0 && (
+                <select value={reporte.refugio_id || ""} style={{ ...entradaTexto, marginBottom: 10 }}
+                  onChange={(e) => {
+                    const ref = refugioDe(e.target.value);
+                    setReporte((p) => fichaDesdeRefugio(p, ref));
+                    if (ref?.lugar_mapa) setMostrarMapa(true);
+                  }}>
+                  <option value="">Otro sitio (no está en la lista)</option>
+                  {refugiosActivos.map((x) => (
+                    <option key={x.id} value={x.id}>{x.nombre}{x.municipio ? ` — ${x.municipio}` : ""}</option>
+                  ))}
+                </select>
+              )}
+              {reporte.refugio_id ? (
+                <p style={{ margin: "0 0 4px", fontSize: 13.5, color: T.tintaSuave, lineHeight: 1.5 }}>
+                  {refugioDe(reporte.refugio_id)?.tipo}
+                  {refugioDe(reporte.refugio_id)?.direccion ? ` · ${refugioDe(reporte.refugio_id).direccion}` : ""}
+                  {" "}— se llenó lo que el refugio ya tiene; puedes ajustar lo que haga falta.
+                </p>
+              ) : (
+                CUSTODIO.map((o) => <Opcion key={o} activo={reporte.custodio === o} onClick={() => setR("custodio", o)}>{o}</Opcion>)
+              )}
             </Campo>
 
-            <Campo numero="14" titulo="Nombre del refugio o del sitio" opcional>
-              <input style={entradaTexto} value={reporte.lugar || ""}
-                onChange={(e) => setR("lugar", e.target.value)} placeholder="Ej.: Albergue Huellas de Esperanza" />
-            </Campo>
+            {!reporte.refugio_id && (
+              <Campo numero="14" titulo="Nombre del refugio o del sitio" opcional
+                ayuda="Escríbelo como se llame. Un voluntario puede después convertirlo en refugio de la lista.">
+                <input style={entradaTexto} value={reporte.lugar || ""}
+                  onChange={(e) => setR("lugar", e.target.value)} placeholder="Ej.: Albergue Huellas de Esperanza" />
+              </Campo>
+            )}
 
             <Campo numero="14b" titulo="¿Mostrar cómo llegar al sitio?" opcional
               ayuda="Solo si quieres que la ubicación del refugio o del sitio quede visible en la ficha. En Google Maps busca el lugar, toca Compartir y copia el enlace.">
@@ -1966,7 +2207,8 @@ export default function App() {
         )}
 
         {modo === "panel" && voluntario && (
-          <Panel registros={registros} voluntario={voluntario}
+          <Panel registros={registros} voluntario={voluntario} refugios={refugios}
+            onGuardarRefugio={guardarRefugio} onAsignarRefugio={asignarRefugio}
             acciones={{ onReencontrar: marcarReencontrado, onAprobar: aprobar, onOcultar: ocultar, onMostrar: mostrarDeNuevo, onVer: verFicha }} />
         )}
 
@@ -1981,6 +2223,15 @@ export default function App() {
                 <option value="">Todos los municipios</option>
                 {municipiosConRegistro.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
+              {refugios.some((x) => registros.some((r) => r.refugio_id === x.id)) && (
+                <select value={filtroRefugio} onChange={(e) => setFiltroRefugio(e.target.value)}
+                  style={{ ...entradaTexto, maxWidth: 260, padding: "10px 12px", minHeight: 44 }}>
+                  <option value="">Todos los refugios</option>
+                  {refugios.filter((x) => registros.some((r) => r.refugio_id === x.id)).map((x) => (
+                    <option key={x.id} value={x.id}>{x.nombre}</option>
+                  ))}
+                </select>
+              )}
               {voluntario && (
                 <Opcion activo={verOcultas} onClick={() => setVerOcultas((v) => !v)}>
                   Ocultas ({ocultas})

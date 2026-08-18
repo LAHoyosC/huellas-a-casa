@@ -35,7 +35,7 @@ export async function sesionActual() {
   if (!usuario) return null;
   const { data: v } = await supabase
     .from("voluntarios")
-    .select("nombre, refugio, activo")
+    .select("nombre, refugio, refugio_id, activo")
     .eq("id", usuario.id)
     .maybeSingle();
   return { correo: usuario.email, voluntario: v && v.activo ? v : null };
