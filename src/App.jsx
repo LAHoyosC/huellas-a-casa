@@ -1020,7 +1020,9 @@ const botonFoto = {
   background: T.blanco, fontSize: 14.5, fontWeight: 560, cursor: "pointer",
 };
 
-function CargarFoto({ archivo, onArchivo, actual }) {
+// sinCamara: para quien busca a su mascota, que no la tiene al frente; solo
+// tiene sentido elegir una foto guardada.
+function CargarFoto({ archivo, onArchivo, actual, sinCamara = false }) {
   const refCamara = useRef(null);
   const refCarrete = useRef(null);
   const [vista, setVista] = useState(actual || null);
@@ -1046,11 +1048,13 @@ function CargarFoto({ archivo, onArchivo, actual }) {
           <img src={vista} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 9, border: `1px solid ${T.linea}` }} />
         )}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <button type="button" onClick={() => refCamara.current?.click()} style={botonFoto}>
-            {archivo ? "Tomar otra" : "Tomar foto"}
-          </button>
+          {!sinCamara && (
+            <button type="button" onClick={() => refCamara.current?.click()} style={botonFoto}>
+              {archivo ? "Tomar otra" : "Tomar foto"}
+            </button>
+          )}
           <button type="button" onClick={() => refCarrete.current?.click()} style={botonFoto}>
-            {archivo ? "Elegir otra" : "Elegir del carrete"}
+            {archivo ? "Elegir otra" : sinCamara ? "Elegir una foto guardada" : "Elegir del carrete"}
           </button>
         </div>
         {/* Con capture el celular abre la camara; sin capture, la galeria. */}
@@ -1660,7 +1664,7 @@ export default function App() {
 
             <Campo numero="11b" titulo="Foto de tu mascota"
               ayuda="No se usa para buscar (el cruce es por los datos). Sirve para que los voluntarios la comparen a ojo con los animales que llegan. Solo la ven ellos y tú con tu número de registro." opcional>
-              <CargarFoto archivo={fotoBusqueda} onArchivo={setFotoBusqueda} />
+              <CargarFoto archivo={fotoBusqueda} onArchivo={setFotoBusqueda} sinCamara />
             </Campo>
 
             <Campo numero="12" titulo="¿A qué nombre responde?"
