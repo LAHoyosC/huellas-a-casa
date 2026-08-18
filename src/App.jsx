@@ -22,6 +22,15 @@ const CONTACTO_DATOS = "huellasacasa.eje@gmail.com";
 const CONTACTO_CELULAR = "+57 301 8009036";
 const CONTACTO_WHATSAPP = `https://wa.me/${CONTACTO_CELULAR.replace(/\D/g, "")}`;
 
+// Numero de registro de una busqueda (BUS-7K3MQ). Sin letras/numeros que
+// se confundan (0/O, 1/I/L). Lo genera la pagina: el publico no puede leer
+// la tabla busquedas, asi que no recibiria un consecutivo de la base.
+function nuevoCodigoBusqueda() {
+  const abc = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const v = crypto.getRandomValues(new Uint8Array(5));
+  return "BUS-" + Array.from(v, (x) => abc[x % abc.length]).join("");
+}
+
 // Enlace publico de una ficha. El Worker (worker/index.js) responde en
 // esta ruta con la foto y los datos del animal en las etiquetas de
 // vista previa, para que al compartir por WhatsApp salga la imagen.
@@ -632,6 +641,11 @@ function Panel({ registros, voluntario, acciones }) {
       .order("creado_en", { ascending: false }).limit(2000)
       .then(({ data }) => setBusquedas(data || []));
   }, []);
+  async function cambiarEstadoBusqueda(b, estado) {
+    const { error } = await supabase.from("busquedas").update({ estado }).eq("id", b.id);
+    if (error) { alert("No se pudo cambiar el estado de la búsqueda."); return; }
+    setBusquedas((p) => p.map((x) => (x.id === b.id ? { ...x, estado } : x)));
+  }
 
   const hoy = new Date();
   const dias = Array.from({ length: 14 }, (_, i) => {
@@ -675,8 +689,10 @@ function Panel({ registros, voluntario, acciones }) {
     { id: "reencontrados", texto: "reencontrados", fichas: registros.filter((r) => r.estado === "reencontrado") },
     { id: "ocultas", texto: "ocultas", fichas: registros.filter((r) => r.estado === "oculto") },
     { id: "fichas_24h", texto: "fichas últimas 24 h", fichas: registros.filter((r) => new Date(r.creado_en) > desde(24)) },
+    { id: "busq_abiertas", texto: "búsquedas abiertas", borde: T.verde, busquedas: B.filter((b) => !b.estado || b.estado === "abierta") },
     { id: "busq_24h", texto: "búsquedas últimas 24 h", busquedas: B.filter((b) => new Date(b.creado_en) > desde(24)) },
-    { id: "busq_contacto", texto: "búsquedas con contacto para avisar", borde: T.verde, busquedas: B.filter((b) => b.contacto_telefono) },
+    { id: "busq_contacto", texto: "abiertas con contacto para avisar", borde: T.verde, busquedas: B.filter((b) => b.contacto_telefono && (!b.estado || b.estado === "abierta")) },
+    { id: "busq_resueltas", texto: "búsquedas resueltas u ocultas", busquedas: B.filter((b) => b.estado && b.estado !== "abierta") },
     { id: "sin_foto", texto: "fichas sin foto", fichas: registros.filter((r) => !r.foto_thumb_url) },
   ];
   const activa = TARJETAS.find((t) => t.id === abierta);
@@ -712,7 +728,7 @@ function Panel({ registros, voluntario, acciones }) {
           ))}
           {activa.busquedas && activa.busquedas.length === 0 && <p style={{ margin: 0, color: T.tintaSuave, fontSize: 14 }}>Nada por aquí.</p>}
           {activa.busquedas && activa.busquedas.map((b) => (
-            <Busqueda key={b.id} b={b} enResguardo={enResguardo} voluntario={voluntario} acciones={acciones} />
+            <Busqueda key={b.id} b={b} enResguardo={enResguardo} voluntario={voluntario} acciones={acciones} onEstado={cambiarEstadoBusqueda} />
           ))}
         </div>
       )}
@@ -730,8 +746,9 @@ function Panel({ registros, voluntario, acciones }) {
 
 // Una busqueda guardada, tal como la dejo el tutor, con su contacto y las
 // fichas en resguardo que hoy se le parecen (cruce inverso). Solo voluntarios.
-function Busqueda({ b, enResguardo, voluntario, acciones }) {
+function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
   const [verParecidas, setVerParecidas] = useState(false);
+  const abierta = !b.estado || b.estado === "abierta";
   const parecidas = useMemo(() => buscarCoincidencias(b, enResguardo).filter((x) => x.resultado.valor >= 55), [b, enResguardo]);
   const rasgos = [b.especie, b.raza && !RAZA_INDEFINIDA.includes(b.raza) ? b.raza : null, b.tamano, b.color, b.pelo ? `pelo ${b.pelo.toLowerCase()}` : null,
     b.sexo && b.sexo !== "No sé" ? b.sexo : null, b.edad, b.orejas ? `orejas ${b.orejas.toLowerCase()}` : null, b.cola ? `cola ${b.cola.toLowerCase()}` : null,
@@ -740,7 +757,10 @@ function Busqueda({ b, enResguardo, voluntario, acciones }) {
   return (
     <article style={{ background: T.blanco, border: `1px solid ${T.linea}`, borderLeft: `4px solid ${T.verde}`, borderRadius: 12, padding: "12px 14px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
-        <div style={{ fontFamily: MONO, fontSize: 11, color: T.tintaSuave }}>BÚSQUEDA · {fecha}{b.estado && b.estado !== "abierta" ? ` · ${b.estado.toUpperCase()}` : ""}</div>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: T.tintaSuave }}>
+          {b.codigo || "BÚSQUEDA"} · {fecha}
+          {!abierta && <span style={{ marginLeft: 8, color: b.estado === "resuelta" ? T.verde : T.rojo }}>{b.estado.toUpperCase()}</span>}
+        </div>
         {b.nombres && <div style={{ fontSize: 13.5 }}>Responde a <strong>{b.nombres}</strong></div>}
       </div>
       <div style={{ fontSize: 15.5, fontWeight: 660, marginTop: 4 }}>{rasgos || "Sin rasgos marcados"}</div>
@@ -761,6 +781,15 @@ function Busqueda({ b, enResguardo, voluntario, acciones }) {
           {parecidas.length ? `${parecidas.length} ficha${parecidas.length > 1 ? "s" : ""} parecida${parecidas.length > 1 ? "s" : ""} hoy` : "Nada parecido hoy"}
           {parecidas.length ? (verParecidas ? " ▲" : " ▼") : ""}
         </button>
+        {onEstado && abierta && (
+          <>
+            <button type="button" onClick={() => onEstado(b, "resuelta")} style={botonSecundario(T.tintaSuave)}>Marcar resuelta</button>
+            <button type="button" onClick={() => onEstado(b, "oculta")} style={botonSecundario(T.tintaSuave)}>Ocultar</button>
+          </>
+        )}
+        {onEstado && !abierta && (
+          <button type="button" onClick={() => onEstado(b, "abierta")} style={botonSecundario(T.tintaSuave)}>Reabrir</button>
+        )}
       </div>
       {verParecidas && parecidas.length > 0 && (
         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
@@ -1191,11 +1220,21 @@ export default function App() {
     setRegistros((p) => p.map((x) => (x.id === r.id ? { ...x, estado: "resguardo" } : x)));
   }
 
-  function buscar() {
+  // Numero de registro de la ultima busqueda guardada (null si no se guardo).
+  const [registroBusqueda, setRegistroBusqueda] = useState(null);
+
+  async function buscar() {
     const activas = registros.filter((r) => r.estado === "resguardo");
     setResultados(buscarCoincidencias(busqueda, activas));
-    if (busqueda.especie) {
-      supabase.from("busquedas").insert([{ ...busqueda, estado: "abierta" }]).then(() => {});
+    setRegistroBusqueda(null);
+    if (!busqueda.especie) return;
+    // Se guarda con un numero de registro para que el tutor sepa que quedo
+    // recibida y los voluntarios puedan hacerle seguimiento desde el panel.
+    for (let intento = 0; intento < 3; intento++) {
+      const codigo = nuevoCodigoBusqueda();
+      const { error } = await supabase.from("busquedas").insert([{ ...busqueda, codigo, estado: "abierta" }]);
+      if (!error) { setRegistroBusqueda(codigo); return; }
+      if (!/codigo|unique|duplicate/i.test(error.message || "")) return; // otro error: no insistir
     }
   }
 
@@ -1505,13 +1544,35 @@ export default function App() {
               }}>Cambiar respuestas</button>
             </div>
 
+            {registroBusqueda && (
+              <div style={{
+                border: `1.5px solid ${T.verde}`, background: T.verdeClaro, borderRadius: 12,
+                padding: "14px 16px", marginBottom: 16, fontSize: 14.5, lineHeight: 1.55,
+              }}>
+                <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: ".12em", color: T.verde, marginBottom: 4 }}>
+                  TU BÚSQUEDA QUEDÓ REGISTRADA
+                </div>
+                Número de registro: <strong style={{ fontFamily: MONO, fontSize: 16 }}>{registroBusqueda}</strong>.
+                Guárdalo. El equipo de voluntarios revisa las búsquedas y las cruza con cada animal que
+                llega; por ahora ese seguimiento se hace a mano y estamos trabajando para automatizarlo.
+                {busqueda.contacto_telefono ? (
+                  <> Si aparece algo parecido, te escribimos por {busqueda.contacto_medio || "WhatsApp"}.</>
+                ) : (
+                  <> <strong>No dejaste contacto:</strong> si quieres que te avisemos,{" "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); setResultados(null); window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }} style={{ color: T.verde }}>
+                      vuelve y agrega tu WhatsApp
+                    </a>.</>
+                )}
+                {" "}Si escribes al grupo, menciona este número.
+              </div>
+            )}
             {resultados.length === 0 ? (
               <div style={{
                 border: `1px solid ${T.linea}`, borderRadius: 12, background: T.blanco,
                 padding: "24px 22px", fontSize: 15, lineHeight: 1.6, color: T.tintaSuave,
               }}>
-                Ningún registro coincide lo suficiente por ahora. Guardamos tu búsqueda: si dejaste
-                WhatsApp, los voluntarios te avisan cuando llegue algo parecido.
+                Ningún registro coincide lo suficiente por ahora. Tu búsqueda quedó guardada: si dejaste
+                contacto, los voluntarios te avisan cuando llegue algo parecido.
               </div>
             ) : (
               <>
