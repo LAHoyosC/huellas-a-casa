@@ -81,7 +81,7 @@ insert into refugios (nombre, tipo, departamento, municipio, direccion, notas)
 values
   ('Albergue Gestora Social de Risaralda', 'Refugio', 'Risaralda', 'Pereira',
    'Av. Las Américas, Calle 95 lote 1 (cerca a Mercasa)',
-   'Albergue de la Gestora Social de Risaralda (Primera Dama).'),
+   'Programa de la Primera Dama de Risaralda.'),
   ('Estación Central de Bomberos de Pereira', 'Refugio', 'Risaralda', 'Pereira', null, null)
 on conflict ((lower(trim(nombre)))) do nothing;
 
