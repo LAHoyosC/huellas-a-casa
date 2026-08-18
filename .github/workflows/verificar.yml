@@ -84,24 +84,20 @@ jobs:
       - name: Preparar lo mínimo de Supabase (roles, auth, storage)
         run: psql "$URL" -X -v ON_ERROR_STOP=1 -q -f scripts/ci/supabase-minimo.sql
 
-      - name: Aplicar TODAS las migraciones en orden, desde cero
+      - name: Aplicar TODAS las migraciones en orden, desde cero (cada una dos veces)
+        # Cada migración se corre dos veces seguidas: si un `db push` se
+        # interrumpe y se repite, no puede romperse. Por eso todo va con
+        # `if not exists`, `create or replace`, `drop ... if exists`.
         run: |
           set -e
           for f in $(ls supabase/migrations/*.sql | sort); do
             echo "==> $f"
             psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" || {
               echo "::error file=$f::Esta migración falla al aplicarse sobre las anteriores. Arréglala en este PR (no edites las ya fusionadas: agrega otra)."; exit 1; }
+            psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" 2>&1 | grep -v NOTICE; test "${PIPESTATUS[0]}" -eq 0 || {
+              echo "::error file=$f::Esta migración no se puede correr dos veces seguidas. Usa 'if not exists', 'create or replace', 'drop ... if exists'."; exit 1; }
           done
-          echo "OK: $(ls supabase/migrations/*.sql | wc -l) migraciones aplicadas sin errores."
-
-      - name: Aplicarlas otra vez (deben ser re-ejecutables sin romperse)
-        run: |
-          set -e
-          for f in $(ls supabase/migrations/*.sql | sort); do
-            psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" || {
-              echo "::error file=$f::Esta migración no se puede correr dos veces. Usa 'if not exists', 'create or replace', 'drop ... if exists'."; exit 1; }
-          done
-          echo "OK: todas las migraciones son idempotentes."
+          echo "OK: $(ls supabase/migrations/*.sql | wc -l) migraciones aplicadas sin errores, y cada una es re-ejecutable."
 
       - name: El código encuentra todas sus columnas y funciones
         run: |
