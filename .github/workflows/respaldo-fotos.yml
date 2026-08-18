@@ -1,0 +1,77 @@
+name: Respaldo de las fotos (R2)
+
+# Una vez por semana copia las fotos del bucket R2 "huellas-fotos" al mismo
+# repositorio privado de respaldos, en la carpeta fotos/. Solo baja lo que
+# no estaba (las fotos nunca cambian: cada una tiene un nombre unico), asi
+# que es rapido y ligero: ~70 KB por ficha entre miniatura y grande.
+#
+# Necesita dos secretos mas que el respaldo de la base:
+#   R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY  -> Cloudflare -> R2 -> Manage R2
+#   API Tokens -> Create API token, permiso "Object Read only", bucket
+#   huellas-fotos. Y CF_ACCOUNT_ID (el mismo del vigia).
+#
+# Restaurar: subir la carpeta fotos/ al bucket con la misma ruta
+# (prod/<id>/<sello>-grande.jpg); las fichas guardan esa ruta.
+
+on:
+  schedule:
+    - cron: "30 7 * * 0"   # domingos, 2:30 a.m. hora de Colombia
+  workflow_dispatch:
+
+env:
+  REPO_RESPALDOS: git@github.com:LAHoyosC/huellas-a-casa-respaldos.git
+
+jobs:
+  respaldar-fotos:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar secretos
+        env:
+          A: ${{ secrets.R2_ACCESS_KEY_ID }}
+          B: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          C: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          if [ -z "$A" ] || [ -z "$B" ] || [ -z "$C" ]; then
+            echo "::error::Faltan R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY o CF_ACCOUNT_ID (ver DESPLIEGUE.md)."; exit 1
+          fi
+
+      - name: Instalar rclone
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash >/dev/null 2>&1
+
+      - name: Preparar llave SSH
+        env:
+          LLAVE: ${{ secrets.RESPALDO_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$LLAVE" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Traer el repositorio de respaldos
+        run: |
+          git clone --depth 1 "$REPO_RESPALDOS" respaldos
+          cd respaldos
+          git config user.name  "respaldo-automatico"
+          git config user.email "actions@github.com"
+          git rev-parse HEAD >/dev/null 2>&1 || git checkout -b main
+
+      - name: Copiar lo nuevo del bucket
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.CF_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          mkdir -p respaldos/fotos
+          # copy (no sync): aqui nunca se borra nada, ni aunque en el bucket falte.
+          rclone copy r2:huellas-fotos respaldos/fotos --transfers 16 --checkers 32 --stats-one-line -v 2>&1 | tail -20
+          echo "Fotos respaldadas: $(find respaldos/fotos -type f | wc -l)  ($(du -sh respaldos/fotos | cut -f1))"
+
+      - name: Guardar en el repositorio privado
+        run: |
+          cd respaldos
+          git add -A
+          git diff --staged --quiet && { echo "Nada nuevo"; exit 0; }
+          git commit -m "Fotos $(date +%Y-%m-%d)"
+          git push origin HEAD:main
