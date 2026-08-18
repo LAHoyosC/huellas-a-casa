@@ -12,11 +12,11 @@ pero no urgente.
 
 ## Ahora (esta semana)
 
-- [ ] **Fusionar el PR #17** (compartir con foto, contacto, control de
-      imágenes, raza, cruce más exigente, sugerencias desde la nota).
-      Antes de fusionar: aplicar en producción la migración
-      `supabase/migrations/20260817000000_raza.sql`. Ya está en staging.
-      Responsable: Lau.
+- [x] Fusionar el PR #17 y aplicar la migración `raza` en producción
+      (hecho 18-ago-2026).
+- [ ] **Fusionar el PR #22** (número de registro de búsquedas y seguimiento
+      desde el panel). Su migración `busquedas_codigo` ya está aplicada en
+      producción y staging.
 - [ ] **Decidir el plan de Cloudflare.** El plan gratis da 100.000
       peticiones al Worker por día; cada foto vista es una. Aguanta unos
       2.500-3.500 visitantes nuevos al día; si se pasa, ese día se quedan
@@ -27,26 +27,33 @@ pero no urgente.
 - [ ] **Regla de límite de subidas** en Cloudflare (WAF → Rate limiting,
       el plan gratis incluye una): p. ej. 20 subidas por IP cada 10 min en
       `/api/fotos/*`. Hoy no hay tope.
-- [ ] **Fusionar el PR #19 (vigía diario)** y correrlo una vez a mano.
-      Para que reporte las peticiones al Worker: crear en Cloudflare un API
-      token de solo lectura de analíticas y guardarlo con el Account ID como
-      secretos `CF_API_TOKEN` / `CF_ACCOUNT_ID` (pasos en DESPLIEGUE.md).
-- [ ] **Visitas:** activar Cloudflare Web Analytics (gratis, sin cookies) y
-      poner el token en `index.html`. Responsable: Lau crea el sitio en el
-      panel y pasa el token.
+- [ ] **Secretos de Cloudflare en GitHub** para que el vigía reporte el
+      Worker y corra el respaldo de fotos: `CF_API_TOKEN`, `CF_ACCOUNT_ID`,
+      `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (pasos en DESPLIEGUE.md).
+      Luego correr una vez a mano «Vigía» y «Respaldo de las fotos».
+- [x] Visitas: Cloudflare Web Analytics activo (18-ago-2026).
 - [ ] **Mirar las métricas** del Worker una vez al día durante la semana
       de difusión (Cloudflare → Workers & Pages → huellas-a-casa → Metrics)
       y el panel de la página (botón «Panel», solo voluntarios).
 
 ## Después (próximas 2-3 semanas) — lo que más reencuentros produce
 
+- [ ] **Estado del caso para el tutor.** Con su número de registro
+      (`BUS-7K3MQ`), que pueda consultar en la página cómo va su búsqueda:
+      si sigue abierta o se marcó resuelta, cuándo se registró, qué rasgos
+      dejó, y las fichas parecidas que hay *hoy* (así no tiene que rehacer
+      la búsqueda cada vez). Requiere una función en la base que devuelva
+      solo esa búsqueda por código exacto (el público no puede leer la tabla)
+      y sin exponer el contacto. Después: que pueda actualizar su contacto o
+      cerrar el caso él mismo («ya apareció»).
 - [ ] **Preguntar cuándo y dónde se perdió** en la búsqueda. Un animal
       recogido *antes* de perderse no puede ser el tuyo: filtro duro que
       hoy no existe. Columna `fecha_perdida` en `busquedas`.
-- [ ] **Cruce inverso con aviso.** Cuando entra una ficha nueva, mostrar al
-      voluntario las búsquedas abiertas que se parecen («hay 2 personas
-      buscando algo así — avisar»). La función `busquedasParecidas()` ya
-      existe en `coincidencia.js`; falta la pantalla.
+- [ ] **Cruce inverso con aviso.** Ya existe la versión ligera en el panel
+      (cada búsqueda muestra «N fichas parecidas hoy» y «Avisar por
+      WhatsApp»). Falta el otro sentido: al guardar una ficha nueva, mostrar
+      al voluntario las búsquedas abiertas que se le parecen, y a futuro
+      avisar solo (automatizar el seguimiento que hoy es manual).
 - [ ] **Medir el cruce:** botones «Es mi mascota» / «No es» en los
       resultados y guardarlos. Con 30-50 casos reales se ajustan los pesos
       con evidencia. Es lo que permite mejorar el motor de verdad.
@@ -87,6 +94,12 @@ pero no urgente.
 ---
 
 ## Hecho
+
+- 18-ago-2026 — Migraciones `raza` y `busquedas_codigo` aplicadas en
+  producción. #20 panel de voluntarios + Web Analytics + enlace a política de
+  datos en el pie; #21 panel con listas desplegables, búsquedas con contacto
+  y fichas parecidas; #22 (en revisión) número de registro de búsquedas y
+  seguimiento (resuelta / ocultar / reabrir).
 
 - 17-ago-2026 — PR #17 (en revisión): compartir con foto en WhatsApp
   (`/m/PER-0012`), contacto del grupo, foto borrosa hasta aprobación,
