@@ -82,6 +82,7 @@ Cada cambio queda en la tabla `historial`.
   [`supabase/migrations/`](supabase/migrations/), se aplican **primero en
   staging**, se prueban en la vista previa, y solo después en producción.
 - Guía completa de montaje y operación: [**DESPLIEGUE.md**](DESPLIEGUE.md).
+- Qué sigue y en qué orden: [**ROADMAP.md**](ROADMAP.md).
 
 ### Correr en local
 
