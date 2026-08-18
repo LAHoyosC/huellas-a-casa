@@ -27,10 +27,9 @@ pero no urgente.
 - [ ] **Regla de límite de subidas** en Cloudflare (WAF → Rate limiting,
       el plan gratis incluye una): p. ej. 20 subidas por IP cada 10 min en
       `/api/fotos/*`. Hoy no hay tope.
-- [ ] **Secretos de Cloudflare en GitHub** para que el vigía reporte el
-      Worker y corra el respaldo de fotos: `CF_API_TOKEN`, `CF_ACCOUNT_ID`,
-      `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (pasos en DESPLIEGUE.md).
-      Luego correr una vez a mano «Vigía» y «Respaldo de las fotos».
+- [x] **Secretos de Cloudflare en GitHub** (`CF_API_TOKEN`, `CF_ACCOUNT_ID`,
+      `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`): puestos el 18-ago-2026;
+      «Vigía» y «Respaldo de las fotos» corridos a mano, ambos en verde.
 - [x] Visitas: Cloudflare Web Analytics activo (18-ago-2026).
 - [ ] **Mirar las métricas** del Worker una vez al día durante la semana
       de difusión (Cloudflare → Workers & Pages → huellas-a-casa → Metrics)
