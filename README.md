@@ -152,6 +152,12 @@ hoy, y cerrarla él mismo si ya apareció. Pasa por la función
 `consultar_busqueda` de la base, que devuelve solo esa búsqueda por código
 exacto y sin el contacto.
 
+Al buscar, el tutor puede dejar una **foto de su mascota** (opcional). No entra
+en el cruce; es para que los voluntarios la comparen a ojo. Va al mismo bucket
+R2 pero en su propia carpeta (`prod/busquedas/<id>/…`), no sale en el listado
+público, y el respaldo semanal de fotos la incluye porque copia el bucket
+entero.
+
 Mientras una ficha está sin verificar, su foto se muestra **borrosa** al
 público (quien quiera la destapa tocándola) y **no** va en la vista previa al
 compartir el enlace. Así una imagen indebida no queda al aire sin que nadie

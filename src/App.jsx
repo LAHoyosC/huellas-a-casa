@@ -816,8 +816,15 @@ function EstadoCaso({ codigoInicial, registros, voluntario, acciones, onBuscarDe
                 border: `1.5px solid ${abierta ? T.ambar : T.verde}`, color: abierta ? "#8A5A12" : T.verde,
               }}>{abierta ? "ABIERTA — SEGUIMOS BUSCANDO" : caso.estado === "resuelta" ? "RESUELTA" : "CERRADA"}</span>
             </div>
-            <div style={{ fontSize: 16.5, fontWeight: 680, marginTop: 6 }}>
-              {caso.nombres ? `${caso.nombres} — ` : ""}{rasgos || "Sin rasgos marcados"}
+            <div style={{ display: "flex", gap: 14, marginTop: 6, alignItems: "flex-start" }}>
+              {caso.foto_thumb_url && (
+                <a href={caso.foto_url || caso.foto_thumb_url} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+                  <img src={caso.foto_thumb_url} alt="" style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 9, display: "block", border: `1px solid ${T.linea}` }} />
+                </a>
+              )}
+              <div style={{ fontSize: 16.5, fontWeight: 680 }}>
+                {caso.nombres ? `${caso.nombres} — ` : ""}{rasgos || "Sin rasgos marcados"}
+              </div>
             </div>
             <div style={{ fontSize: 13.5, color: T.tintaSuave, marginTop: 3 }}>
               {[caso.barrio, caso.municipio, caso.departamento].filter(Boolean).join(", ") || "Sin zona"}
@@ -869,7 +876,13 @@ function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
     b.collar_color ? `collar ${b.collar_color.toLowerCase()}` : null].filter(Boolean).join(" · ");
   const fecha = new Date(b.creado_en).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   return (
-    <article style={{ background: T.blanco, border: `1px solid ${T.linea}`, borderLeft: `4px solid ${T.verde}`, borderRadius: 12, padding: "12px 14px" }}>
+    <article style={{ background: T.blanco, border: `1px solid ${T.linea}`, borderLeft: `4px solid ${T.verde}`, borderRadius: 12, padding: "12px 14px", display: "flex", gap: 14 }}>
+      {b.foto_thumb_url && (
+        <a href={b.foto_url || b.foto_thumb_url} target="_blank" rel="noreferrer" title="Ver la foto grande" style={{ flexShrink: 0 }}>
+          <img src={b.foto_thumb_url} alt="" loading="lazy" style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 9, display: "block", border: `1px solid ${T.linea}` }} />
+        </a>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
         <div style={{ fontFamily: MONO, fontSize: 11, color: T.tintaSuave }}>
           {b.codigo || "BÚSQUEDA"} · {fecha}
@@ -912,6 +925,7 @@ function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
           ))}
         </div>
       )}
+      </div>
     </article>
   );
 }
@@ -1339,19 +1353,34 @@ export default function App() {
   const [registroBusqueda, setRegistroBusqueda] = useState(null);
   // Codigo con el que se abre "¿Como va mi busqueda?" (por enlace #BUS-... o desde el aviso).
   const [casoInicial, setCasoInicial] = useState("");
+  // Foto opcional que deja el tutor al buscar (para que los voluntarios cotejen).
+  const [fotoBusqueda, setFotoBusqueda] = useState(null);
+  const [guardandoBusqueda, setGuardandoBusqueda] = useState(false);
 
   async function buscar() {
     const activas = registros.filter((r) => r.estado === "resguardo");
     setResultados(buscarCoincidencias(busqueda, activas));
     setRegistroBusqueda(null);
     if (!busqueda.especie) return;
-    // Se guarda con un numero de registro para que el tutor sepa que quedo
-    // recibida y los voluntarios puedan hacerle seguimiento desde el panel.
-    for (let intento = 0; intento < 3; intento++) {
-      const codigo = nuevoCodigoBusqueda();
-      const { error } = await supabase.from("busquedas").insert([{ ...busqueda, codigo, estado: "abierta" }]);
-      if (!error) { setRegistroBusqueda(codigo); return; }
-      if (!/codigo|unique|duplicate/i.test(error.message || "")) return; // otro error: no insistir
+    setGuardandoBusqueda(true);
+    try {
+      // La foto (si la dejo) se sube antes, a su propia carpeta, y se guarda
+      // en el mismo insert: el publico no puede actualizar busquedas.
+      const id = crypto.randomUUID();
+      let urls = {};
+      if (fotoBusqueda) {
+        try { urls = await subirFoto(fotoBusqueda, id, "busquedas"); } catch { /* se guarda sin foto */ }
+      }
+      // Se guarda con un numero de registro para que el tutor sepa que quedo
+      // recibida y los voluntarios puedan hacerle seguimiento desde el panel.
+      for (let intento = 0; intento < 3; intento++) {
+        const codigo = nuevoCodigoBusqueda();
+        const { error } = await supabase.from("busquedas").insert([{ id, ...busqueda, ...urls, codigo, estado: "abierta" }]);
+        if (!error) { setRegistroBusqueda(codigo); setFotoBusqueda(null); return; }
+        if (!/codigo|unique|duplicate/i.test(error.message || "")) return; // otro error: no insistir
+      }
+    } finally {
+      setGuardandoBusqueda(false);
     }
   }
 
@@ -1629,6 +1658,11 @@ export default function App() {
               placeholder="Ej.: renquea de una pata de atrás, tiene una manchita blanca en el pecho"
             />
 
+            <Campo numero="11b" titulo="Foto de tu mascota"
+              ayuda="No se usa para buscar (el cruce es por los datos). Sirve para que los voluntarios la comparen a ojo con los animales que llegan. Solo la ven ellos y tú con tu número de registro." opcional>
+              <CargarFoto archivo={fotoBusqueda} onArchivo={setFotoBusqueda} />
+            </Campo>
+
             <Campo numero="12" titulo="¿A qué nombre responde?"
               ayuda="No se usa para buscar. Sirve para que el refugio lo llame y confirme." opcional>
               <input style={entradaTexto} value={busqueda.nombres || ""}
@@ -1645,11 +1679,11 @@ export default function App() {
               Si dejas un contacto, autorizas que los voluntarios lo usen solo para avisarte.{" "}
               <a href="/#aviso" onClick={irAlAviso} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
-            <button type="button" onClick={buscar} style={{
-              background: T.verde, color: T.blanco, border: "none", borderRadius: 10,
-              padding: "16px 26px", fontSize: 17, fontWeight: 680, cursor: "pointer",
+            <button type="button" onClick={buscar} disabled={guardandoBusqueda} style={{
+              background: guardandoBusqueda ? T.tintaSuave : T.verde, color: T.blanco, border: "none", borderRadius: 10,
+              padding: "16px 26px", fontSize: 17, fontWeight: 680, cursor: guardandoBusqueda ? "wait" : "pointer",
               marginLeft: 25, marginTop: 6,
-            }}>Buscar coincidencias</button>
+            }}>{guardandoBusqueda ? "Guardando…" : "Buscar coincidencias"}</button>
           </section>
         )}
 
