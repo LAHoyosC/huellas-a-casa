@@ -1642,15 +1642,9 @@ export default function App() {
         {modo === "buscar" && !resultados && (
           <section>
             <div style={{
-              background: T.ambarClaro, border: "1px solid #EBD9B4", borderRadius: 11,
-              padding: "14px 16px", marginBottom: 24, fontSize: 14.5, lineHeight: 1.5,
-            }}>
-              Responde solo lo que recuerdes con seguridad. Lo que dejes en blanco no te quita coincidencias.
-            </div>
-            <div style={{
               display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px",
               border: `1.5px solid ${T.verde}`, background: T.blanco, borderRadius: 11,
-              padding: "12px 16px", marginTop: -10, marginBottom: 24,
+              padding: "12px 16px", marginBottom: 14,
             }}>
               <span style={{ fontSize: 15, flex: 1, minWidth: 200 }}>
                 <strong style={{ fontWeight: 660 }}>¿Ya buscaste antes?</strong> Con tu número BUS-… puedes ver cómo va.
@@ -1659,6 +1653,12 @@ export default function App() {
                 background: T.verde, color: T.blanco, border: "none", borderRadius: 9,
                 padding: "11px 16px", fontSize: 15, fontWeight: 660, cursor: "pointer",
               }}>Consultar mi búsqueda</button>
+            </div>
+            <div style={{
+              background: T.ambarClaro, border: "1px solid #EBD9B4", borderRadius: 11,
+              padding: "14px 16px", marginBottom: 24, fontSize: 14.5, lineHeight: 1.5,
+            }}>
+              Responde solo lo que recuerdes con seguridad. Lo que dejes en blanco no te quita coincidencias.
             </div>
 
             <Zona v={busqueda} set={setB} numero="01" />
