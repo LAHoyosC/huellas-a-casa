@@ -45,6 +45,14 @@ export const CONCEPTOS = {
     etiqueta: "identificación",
     raices: ["placa", "chapa", "medall", "carnet", "chip", "microchip", "tatuaj"],
   },
+  cicatriz: {
+    etiqueta: "cicatriz",
+    raices: ["cicatri", "costur", "quemad", "marca en la piel", "le falta pelo"],
+  },
+  tatuaje: {
+    etiqueta: "tatuaje",
+    raices: ["tatuaj", "tatu"],
+  },
   docil: {
     etiqueta: "dócil",
     raices: ["carinos", "docil", "mansit", "manso", "noble", "juguet",
@@ -112,6 +120,8 @@ export const SENA_A_CONCEPTO = {
   "Lleva pañoleta": "panoleta",
   "Tiene placa": "placa",
   "Tiene chip": "placa",
+  "Cicatriz visible": "cicatriz",
+  "Tatuaje": "tatuaje",
   "Cojea": "cojera",
   "Está herido": "herida",
   "Ojos claros": "ojos",

@@ -85,6 +85,7 @@ export const SENAS = [
   "Tiene placa",
   "Tiene chip",
   "Cicatriz visible",
+  "Tatuaje",
   "Cojea",
   "Está herido",
   "Ojos claros",
@@ -93,9 +94,24 @@ export const SENAS = [
   "Muy asustado",
 ];
 
+// Señas que piden decir en qué parte del cuerpo están.
+export const SENAS_CON_LUGAR = ["Cicatriz visible", "Tatuaje"];
+
 export const COLOR_COLLAR = ["Rojo", "Azul", "Negro", "Verde", "Rosado", "Café", "Otro color"];
 
 export const CUSTODIO = ["Refugio", "Hogar temporal", "Casa de familia", "Veterinaria"];
+
+// Barrios que se sugieren al escribir. El campo sigue siendo libre: si el
+// barrio no está, se escribe igual. Agregar aquí los que pidan los refugios.
+export const BARRIOS = {
+  Pereira: [
+    "Olaya", "Diger", "Cuba", "Centro", "El Poblado", "Boston", "La Villa",
+    "Villa Santana", "Kennedy", "El Jardín", "Álamos", "Pinares", "Los Alpes",
+    "San Nicolás", "Corales", "Belmonte", "Samaria", "Perla del Otún", "Tokio",
+    "El Rocío", "Cerritos", "Galicia", "Combia", "Altagracia", "Morelia",
+    "Tribunas", "La Florida", "Arabia", "Puerto Caldas", "Caimalito",
+  ],
+};
 
 export const MUNICIPIOS = {
   Risaralda: [
