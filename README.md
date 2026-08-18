@@ -145,7 +145,12 @@ Cada búsqueda que hace un tutor queda guardada con un **número de registro**
 (`BUS-7K3MQ`) que se le muestra al terminar, junto con el aviso de que el
 equipo la cruza con cada animal que llega (por ahora a mano). En el panel de
 voluntarios cada búsqueda muestra su contacto, las fichas parecidas de hoy y
-se puede marcar **resuelta**, **ocultar** o **reabrir**.
+se puede marcar **resuelta**, **ocultar** o **reabrir**. El tutor puede
+consultar **cómo va su búsqueda** con ese número (enlace `…/#BUS-7K3MQ` o
+«¿Cómo va mi búsqueda?» en el formulario): estado, rasgos, fichas parecidas
+hoy, y cerrarla él mismo si ya apareció. Pasa por la función
+`consultar_busqueda` de la base, que devuelve solo esa búsqueda por código
+exacto y sin el contacto.
 
 Mientras una ficha está sin verificar, su foto se muestra **borrosa** al
 público (quien quiera la destapa tocándola) y **no** va en la vista previa al
