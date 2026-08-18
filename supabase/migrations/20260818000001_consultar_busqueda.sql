@@ -47,3 +47,13 @@ revoke all on function consultar_busqueda(text) from public;
 revoke all on function cerrar_busqueda(text) from public;
 grant execute on function consultar_busqueda(text) to anon, authenticated;
 grant execute on function cerrar_busqueda(text) to anon, authenticated;
+
+-- Las busquedas anteriores al numero de registro reciben uno tambien, con el
+-- mismo alfabeto que usa la pagina (sin 0/O ni 1/I/L).
+-- (la condicion "or b.id is null" es un truco: obliga a evaluar el azar
+-- fila por fila; sin ella Postgres calcularia un solo codigo para todas.)
+update busquedas b set codigo = 'BUS-' || (
+  select string_agg(substr('ABCDEFGHJKMNPQRSTUVWXYZ23456789', 1 + floor(random() * 31)::int, 1), '')
+  from generate_series(1, 5) g where g > 0 or b.id is null
+)
+where codigo is null;
