@@ -41,6 +41,22 @@ pero no urgente.
 - [x] **Estado del caso para el tutor** (PR #24, 18-ago-2026): consulta por
       número de registro, estado, rasgos, fichas parecidas hoy y «ya
       apareció — cerrar». Pendiente: que pueda actualizar su contacto.
+- [ ] **Refugios como tabla propia** (pedido del equipo, 18-ago-2026). Hoy
+      «Nombre del refugio o del sitio» es texto libre en cada ficha, así que
+      no se puede filtrar bien ni evitar que el mismo refugio quede escrito
+      de tres formas. Plan:
+      - Tabla `refugios` (nombre, tipo, municipio, barrio, dirección o enlace
+        de mapa, contacto público, notas) y una columna `refugio_id` en
+        `mascotas`. Las fichas actuales se enlazan por nombre y las que no
+        cuadren las asigna un voluntario.
+      - Voluntarios: agregar refugios y editar su información, y ver las
+        mascotas asociadas a cada uno.
+      - Filtro por refugio en el listado (público y voluntarios).
+      - **Autollenado al registrar:** al elegir el refugio, la ficha se llena
+        sola con municipio, barrio, ubicación, «cómo llegar» y contacto, para
+        que quien recibe animales solo tenga que marcar los rasgos y la foto.
+      - Después: que cada voluntario tenga un refugio «por defecto», y que el
+        panel muestre cifras por refugio.
 - [ ] **Preguntar cuándo y dónde se perdió** en la búsqueda. Un animal
       recogido *antes* de perderse no puede ser el tuyo: filtro duro que
       hoy no existe. Columna `fecha_perdida` en `busquedas`.
