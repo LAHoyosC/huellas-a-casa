@@ -1,0 +1,63 @@
+name: Desplegado (producción viva tras cada merge)
+
+# Después de cada merge a main, espera a que Cloudflare publique la versión
+# nueva y abre PRODUCCIÓN en un navegador de verdad, igual que el check
+# «pagina» del PR. Si la página no carga o revienta, este workflow queda en
+# rojo (= correo) y deja escrito qué hacer: Revert del PR.
+#
+# El check «pagina» del PR ya evita casi todo esto antes de fusionar. Este
+# es la red de abajo: lo que solo se ve con la configuración real de
+# producción (Worker, R2, base de prod).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desplegado
+  cancel-in-progress: true
+
+jobs:
+  produccion:
+    name: produccion
+    runs-on: ubuntu-latest
+    env:
+      URL_PROD: https://huellas-a-casa.huellas-a-casa.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Esperar a que producción sirva esta versión
+        # Compila igual que Cloudflare (mismo código = mismo nombre de archivo
+        # con hash) y espera hasta 10 min a que la portada lo referencie.
+        run: |
+          npm run build > /dev/null
+          ESPERADO=$(grep -o 'assets/index-[^"]*\.js' dist/index.html | head -1)
+          echo "Espero que producción sirva: $ESPERADO"
+          for i in $(seq 1 60); do
+            ACTUAL=$(curl -s "$URL_PROD/" | grep -o 'assets/index-[^"]*\.js' | head -1)
+            if [ "$ACTUAL" = "$ESPERADO" ]; then echo "Producción ya sirve la versión nueva."; exit 0; fi
+            sleep 10
+          done
+          echo "::warning::Tras 10 min producción sirve «$ACTUAL», no «$ESPERADO». Pruebo igual lo que hay publicado (¿el build de Cloudflare falló o va lento?)."
+
+      - name: Abrir producción en el navegador
+        run: |
+          node scripts/ci/probar-pagina.mjs "$URL_PROD" || {
+            echo "::error::PRODUCCIÓN NO CARGA BIEN después de este merge. Qué hacer YA: en GitHub abre el PR que acaba de fusionarse → botón «Revert» → fusiona el PR de reversión (pasa el CI en ~3 min). Producción vuelve a la versión anterior sola. Luego se arregla con calma en una rama."; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pantallazo-produccion
+          path: pagina-fallo.png
+          if-no-files-found: ignore

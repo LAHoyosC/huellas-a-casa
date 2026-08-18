@@ -105,7 +105,7 @@ diga qué cambia para el usuario (ej. «Señas: dónde está la cicatriz»), y e
 cuerpo siguiendo la plantilla. Pega la **URL de vista previa** de Cloudflare
 cuando aparezca en el PR (el bot la comenta) y prueba ahí antes de pedir revisión.
 
-El CI corre solo. Cuatro checks, los cuatro obligatorios:
+El CI corre solo. Cinco checks, los cinco obligatorios:
 
 | Check | Qué mira | Cuándo falla |
 |---|---|---|
@@ -113,11 +113,14 @@ El CI corre solo. Cuatro checks, los cuatro obligatorios:
 | `base-de-datos` | Postgres limpio → migraciones de `main` → datos de mentira → SOLO las nuevas del PR (dos veces) → ninguna fila perdida → el código encuentra sus columnas/funciones (`probar-esquema.mjs`) → el público no lee contactos ni borra (`probar-rls.sql`) | migración rota, que rompe filas viejas, faltante, o que abre permisos |
 | `revisar` | migraciones solo agregadas (nunca editadas) y **nada destructivo** (lint: prohibida/crítica/aditiva), sin secretos, sin `dist/`/`entorno.js`, listas de delicados iguales, aviso de dependencias | subiste algo que no debe entrar |
 | `aprobacion` | si el PR toca archivos delicados **o trae una migración crítica**, exige la aprobación de Lau sobre el commit actual; si no, pasa solo | tocas delicados/migración crítica y Lau aún no aprobó |
+| `pagina` | abre la compilación del PR en **Chromium** (contra staging) y recorre portada, listado, formularios, estado del caso, voluntarios; falla ante cualquier error de JavaScript | la página revienta o se queda en blanco al usarla |
 | `staging` (no bloquea) | aplica las migraciones nuevas del PR a la base de staging, para que la vista previa funcione | — |
+
+Después de cada merge, `desplegado.yml` espera a que producción sirva la versión nueva y la abre igual en Chromium; si falla, correo + instrucción de *Revert*. El vigía la abre cada mañana.
 
 **Dos carriles:**
 
-- **Reversible** (textos, catálogos, diccionarios, interfaz, docs): con los cuatro checks en verde **se fusiona solo**. Activa el auto-merge al abrir el PR: `gh pr merge --auto --squash`. Nadie tiene que esperar a nadie. Si sale mal, *Revert*.
+- **Reversible** (textos, catálogos, diccionarios, interfaz, docs): con los cinco checks en verde **se fusiona solo**. Activa el auto-merge al abrir el PR: `gh pr merge --auto --squash`. Nadie tiene que esperar a nadie. Si sale mal, *Revert*.
 - **Delicado** (regla 6) **o migración crítica** (regla 4): mismo flujo, pero `aprobacion` queda en rojo hasta que Lau apruebe. Con auto-merge activado, se fusiona solo en cuanto ella aprueba.
 - **Migraciones**: al fusionar, `migrar.yml` las aplica solo en staging y prod (solo las que faltan, en orden, registradas en la tabla `migraciones_aplicadas`) y vuelve a comprobar esquema y RLS contra la base real. Nadie corre `db push`.
 
