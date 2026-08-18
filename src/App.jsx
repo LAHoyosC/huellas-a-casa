@@ -621,6 +621,74 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
   );
 }
 
+// Panel de uso para voluntarios: cuanto entra, cuanto se busca, que hay
+// pendiente. Las busquedas solo las devuelve la base a voluntarios (RLS).
+function Panel({ registros }) {
+  const [busquedas, setBusquedas] = useState(null);
+  useEffect(() => {
+    supabase.from("busquedas").select("creado_en, especie, municipio, contacto_telefono, estado")
+      .order("creado_en", { ascending: false }).limit(2000)
+      .then(({ data }) => setBusquedas(data || []));
+  }, []);
+
+  const hoy = new Date();
+  const dias = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(hoy); d.setDate(hoy.getDate() - (13 - i));
+    return d.toISOString().slice(0, 10);
+  });
+  const porDia = (lista) => {
+    const c = Object.fromEntries(dias.map((d) => [d, 0]));
+    for (const x of lista || []) { const k = (x.creado_en || "").slice(0, 10); if (k in c) c[k]++; }
+    return dias.map((d) => c[d]);
+  };
+  const fichasDia = porDia(registros);
+  const busqDia = porDia(busquedas);
+  const cuenta = (f) => registros.filter(f).length;
+  const desde = (h) => Date.now() - h * 3600000;
+  const n = (v) => <strong style={{ fontWeight: 700, fontSize: 24, display: "block", lineHeight: 1.1 }}>{v}</strong>;
+
+  const Barras = ({ datos, color, titulo }) => {
+    const max = Math.max(1, ...datos);
+    return (
+      <div>
+        <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: ".1em", color: T.tintaSuave, marginBottom: 6 }}>{titulo}</div>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 70 }}>
+          {datos.map((v, i) => (
+            <div key={i} title={`${dias[i]}: ${v}`} style={{ flex: 1, background: color, opacity: v ? 1 : 0.18, height: `${Math.max(4, (v / max) * 100)}%`, borderRadius: 3 }} />
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: MONO, fontSize: 10.5, color: T.tintaSuave, marginTop: 4 }}>
+          <span>{dias[0].slice(5)}</span><span>hoy · total 14 días: {datos.reduce((a, b) => a + b, 0)}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const tarjeta = { border: `1px solid ${T.linea}`, borderRadius: 11, background: T.blanco, padding: "12px 14px", fontSize: 13, color: T.tintaSuave };
+  return (
+    <section style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        <div style={tarjeta}>{n(cuenta((r) => r.estado === "resguardo"))}en resguardo</div>
+        <div style={{ ...tarjeta, borderColor: T.ambar }}>{n(cuenta((r) => r.estado === "resguardo" && !r.verificado))}sin verificar</div>
+        <div style={tarjeta}>{n(cuenta((r) => r.estado === "reencontrado"))}reencontrados</div>
+        <div style={tarjeta}>{n(cuenta((r) => r.estado === "oculto"))}ocultas</div>
+        <div style={tarjeta}>{n(cuenta((r) => new Date(r.creado_en) > desde(24)))}fichas últimas 24 h</div>
+        <div style={tarjeta}>{n(busquedas ? busquedas.filter((b) => new Date(b.creado_en) > desde(24)).length : "…")}búsquedas últimas 24 h</div>
+        <div style={tarjeta}>{n(busquedas ? busquedas.filter((b) => b.contacto_telefono).length : "…")}búsquedas con contacto para avisar</div>
+        <div style={tarjeta}>{n(cuenta((r) => !r.foto_thumb_url))}fichas sin foto</div>
+      </div>
+      <div style={{ ...tarjeta, display: "grid", gap: 18, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+        <Barras datos={fichasDia} color={T.ambar} titulo="FICHAS NUEVAS POR DÍA" />
+        <Barras datos={busqDia} color={T.verde} titulo="BÚSQUEDAS POR DÍA" />
+      </div>
+      <p style={{ margin: 0, fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
+        Las visitas y las peticiones al servidor no se ven aquí: están en el panel de Cloudflare
+        (Workers & Pages → huellas-a-casa → Metrics) y en el vigía diario del repositorio (Actions → Vigía).
+      </p>
+    </section>
+  );
+}
+
 function Bloque({ titulo, children }) {
   return (
     <div>
@@ -1232,6 +1300,7 @@ export default function App() {
           {btnModo("buscar", "Busco a mi mascota", "Responde y te muestro los parecidos")}
           {btnModo("reportar", "Encontré una mascota", "Para refugios, hogares y voluntarios")}
           {btnModo("lista", "Ver todos los registros", cargando ? "Cargando…" : `${registros.length - ocultas} fichas`)}
+          {voluntario && btnModo("panel", "Panel", "Uso y pendientes")}
         </div>
 
         {errorCarga && (
@@ -1546,6 +1615,8 @@ export default function App() {
             </p>
           </section>
         )}
+
+        {modo === "panel" && voluntario && <Panel registros={registros} />}
 
         {modo === "lista" && (
           <section>
