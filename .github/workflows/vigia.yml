@@ -11,6 +11,9 @@ name: Vigía (uso y salud diarios)
 #   - Worker (Cloudflare): peticiones de ayer frente a las 100.000/día
 #     gratis. Solo si existen los secretos CF_API_TOKEN y CF_ACCOUNT_ID
 #     (token de solo lectura de analíticas); si no, lo salta y avisa.
+#   - Esquema: que la base de producción tenga todas las columnas y
+#     funciones que el código en main usa (scripts/probar-esquema.mjs).
+#     Si falta algo, hay una migración fusionada sin aplicar -> alarma.
 #
 # Umbrales (cámbialos aquí si hace falta):
 #   Worker  > 70 % del tope diario -> alarma
@@ -26,6 +29,10 @@ jobs:
   vigilar:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Instalar cliente de Postgres 17
         run: |
           sudo apt-get install -y postgresql-common >/dev/null
@@ -62,6 +69,22 @@ jobs:
                order by d"
             echo "FIN"
           } >> "$GITHUB_ENV"
+
+      - name: Esquema de producción al día con el código
+        # Compara las columnas y funciones que usa el código (en main) con
+        # las que hay en la base de producción. Si falta algo, es que hay una
+        # migración fusionada sin aplicar: se avisa como error (= correo).
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$SUPABASE_DB_URL" -X -A -t -c "$(node scripts/probar-esquema.mjs --consulta)" > esquema.txt
+          if node scripts/probar-esquema.mjs esquema.txt > esquema.log 2>&1; then
+            echo "ESQUEMA=al día" >> "$GITHUB_ENV"
+          else
+            cat esquema.log
+            echo "ESQUEMA=FALTAN MIGRACIONES EN PRODUCCIÓN (ver el paso «Esquema de producción»)" >> "$GITHUB_ENV"
+            echo "ESQUEMA_MAL=1" >> "$GITHUB_ENV"
+          fi
 
       - name: Medir peticiones al Worker (Cloudflare)
         env:
@@ -106,6 +129,7 @@ jobs:
             echo "| Voluntarios activos | $VOLUNTARIOS |"
             echo "| Base de datos | $DB_MB MB de 500 MB gratis |"
             echo "| Worker ayer | $WORKER_AYER |"
+            echo "| Esquema de la base vs. código | $ESQUEMA |"
             echo
             echo "### Últimos 14 días"
             echo
@@ -115,6 +139,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           ALARMA=0
+          if [ "${ESQUEMA_MAL:-0}" = "1" ]; then
+            echo "::error::A producción le faltan migraciones que ya están en main. Aplícalas: npx supabase link --project-ref fkixmjfcrbsbjfqgfdpu && npx supabase db push"; ALARMA=1
+          fi
           if [ "${WORKER_PCT:-0}" -gt 70 ]; then
             echo "::error::Worker ayer al ${WORKER_PCT} % del tope diario. Considera Workers Paid (US\$5/mes) o paginar el listado."; ALARMA=1
           fi

@@ -1,0 +1,30 @@
+# Archivos DELICADOS: tocarlos exige la aprobación explícita de Lau antes de
+# fusionar (lo comprueba .github/workflows/aprobacion.yml y CODEOWNERS).
+# Todo lo demás (textos, catálogos, diccionarios, interfaz, documentación)
+# se fusiona solo cuando el CI está en verde: es reversible con un Revert.
+#
+# Criterio para estar aquí: si sale mal, NO se arregla con un Revert.
+# Base de datos, despliegue, permisos, secretos, dependencias, motor de cruce.
+#
+# Una ruta por línea. Si termina en / cubre todo lo de adentro.
+# Esta lista la usa el CI tal cual: no pongas comodines.
+supabase/migrations/
+.github/
+.claude/
+scripts/ci/
+scripts/build.mjs
+scripts/probar-esquema.mjs
+scripts/probar-cruce.mjs
+wrangler.jsonc
+.env.production
+.env.staging
+.env.example
+worker/
+package.json
+package-lock.json
+src/lib/coincidencia.js
+src/lib/supabase.js
+src/lib/sesion.js
+src/lib/foto.js
+CLAUDE.md
+CONTRIBUIR.md

@@ -1,3 +1,26 @@
-# Solo estas personas pueden aprobar cambios. La proteccion de main
-# exige la aprobacion de un code owner para mergear.
-*  @LAHoyosC
+# Quién tiene que aprobar un PR ANTES de que se pueda fusionar.
+#
+# Solo lo delicado (lo que no se arregla con un Revert) exige la aprobación
+# de Lau. Lo demás se fusiona solo cuando el CI está en verde (auto-merge).
+# La lista canónica está en scripts/ci/delicados.txt: mantén las dos iguales.
+
+/supabase/migrations/        @LAHoyosC
+/.github/                    @LAHoyosC
+/.claude/                    @LAHoyosC
+/scripts/ci/                 @LAHoyosC
+/scripts/build.mjs           @LAHoyosC
+/scripts/probar-esquema.mjs  @LAHoyosC
+/scripts/probar-cruce.mjs    @LAHoyosC
+/wrangler.jsonc              @LAHoyosC
+/.env.production             @LAHoyosC
+/.env.staging                @LAHoyosC
+/.env.example                @LAHoyosC
+/worker/                     @LAHoyosC
+/package.json                @LAHoyosC
+/package-lock.json           @LAHoyosC
+/src/lib/coincidencia.js     @LAHoyosC
+/src/lib/supabase.js         @LAHoyosC
+/src/lib/sesion.js           @LAHoyosC
+/src/lib/foto.js             @LAHoyosC
+/CLAUDE.md                   @LAHoyosC
+/CONTRIBUIR.md               @LAHoyosC
