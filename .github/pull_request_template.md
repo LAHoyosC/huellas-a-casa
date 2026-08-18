@@ -15,7 +15,7 @@
 ## Base de datos
 
 - [ ] No toca la base
-- [ ] Trae migración nueva en `supabase/migrations/` (solo agrega, no edita las viejas). **Lau la aplica** en staging → prod después de aprobar.
+- [ ] Trae migración nueva en `supabase/migrations/` (solo agrega; nada destructivo). Si es **crítica** (crea tabla, RLS, permisos, `security definer`, tipos, datos) necesita la aprobación de Lau; si es aditiva (columna/índice), pasa sola. El CI la aplica al fusionar.
 
 ## Archivos delicados (lista en `scripts/ci/delicados.txt`)
 

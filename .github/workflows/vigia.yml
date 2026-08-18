@@ -86,6 +86,18 @@ jobs:
             echo "ESQUEMA_MAL=1" >> "$GITHUB_ENV"
           fi
 
+      - name: El público sigue sin ver lo que no debe (RLS, solo lectura)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -q -f scripts/ci/probar-rls-lectura.sql > rls.log 2>&1; then
+            echo "RLS=al día" >> "$GITHUB_ENV"
+          else
+            cat rls.log
+            echo "RLS=FALLA (ver el paso «El público sigue sin ver…»)" >> "$GITHUB_ENV"
+            echo "RLS_MAL=1" >> "$GITHUB_ENV"
+          fi
+
       - name: Medir peticiones al Worker (Cloudflare)
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
@@ -130,6 +142,7 @@ jobs:
             echo "| Base de datos | $DB_MB MB de 500 MB gratis |"
             echo "| Worker ayer | $WORKER_AYER |"
             echo "| Esquema de la base vs. código | $ESQUEMA |"
+            echo "| Permisos del público (RLS) | $RLS |"
             echo
             echo "### Últimos 14 días"
             echo
@@ -139,6 +152,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           ALARMA=0
+          if [ "${RLS_MAL:-0}" = "1" ]; then
+            echo "::error::En producción el público puede ver o hacer algo que no debe (prueba de RLS). Revisa las políticas YA."; ALARMA=1
+          fi
           if [ "${ESQUEMA_MAL:-0}" = "1" ]; then
             echo "::error::A producción le faltan migraciones que ya están en main. Aplícalas: npx supabase link --project-ref fkixmjfcrbsbjfqgfdpu && npx supabase db push"; ALARMA=1
           fi

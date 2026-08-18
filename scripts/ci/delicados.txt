@@ -6,14 +6,18 @@
 # Criterio para estar aquí: si sale mal, NO se arregla con un Revert.
 # Base de datos, despliegue, permisos, secretos, dependencias, motor de cruce.
 #
+# Las MIGRACIONES no están aquí: las clasifica scripts/clasificar-migracion.mjs.
+# Las críticas (crear tabla, RLS, permisos, tipos, datos) exigen aprobación
+# igual que estas rutas; las aditivas (agregar columna/índice) pasan solas.
+#
 # Una ruta por línea. Si termina en / cubre todo lo de adentro.
 # Esta lista la usa el CI tal cual: no pongas comodines.
-supabase/migrations/
 .github/
 .claude/
 scripts/ci/
 scripts/build.mjs
 scripts/probar-esquema.mjs
+scripts/clasificar-migracion.mjs
 scripts/probar-cruce.mjs
 wrangler.jsonc
 .env.production

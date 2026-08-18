@@ -1,0 +1,74 @@
+name: Migrar (aplicar migraciones al fusionar)
+
+# Cuando entra a main un PR con migraciones nuevas, este workflow las aplica
+# en PRODUCCIÓN (y antes en staging, si existe el secreto), en orden, solo
+# las que faltan según la tabla migraciones_aplicadas. Nadie tiene que
+# correr `supabase db push` a mano.
+#
+# Puede hacerlo con tranquilidad porque para llegar aquí el PR ya pasó:
+#   - lint: nada destructivo (scripts/clasificar-migracion.mjs)
+#   - aplicación desde cero y sobre datos, dos veces (verificar.yml)
+#   - prueba de RLS: el público no lee contactos ni borra
+#   - si era crítica (crear tabla, RLS, permisos, tipos, datos): la aprobación de Lau
+#
+# Después de aplicar, comprueba contra la base real que el código encuentra
+# todo (probar-esquema.mjs) y que el público sigue sin ver lo que no debe
+# (probar-rls-lectura.sql). Si algo falla, el workflow queda en rojo y
+# GitHub avisa por correo; el vigía lo repite cada mañana.
+#
+# Se puede lanzar a mano (workflow_dispatch) para reintentar.
+
+on:
+  push:
+    branches: [main]
+    paths: ["supabase/migrations/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrar
+  cancel-in-progress: false
+
+jobs:
+  migrar:
+    name: migrar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar cliente de Postgres 17
+        run: |
+          sudo apt-get install -y postgresql-common >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y postgresql-client-17 >/dev/null
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Aplicar en STAGING lo que falte
+        env:
+          URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+        run: |
+          if [ -z "$URL" ]; then echo "::warning::Sin secreto SUPABASE_STAGING_DB_URL: salto staging."; exit 0; fi
+          bash scripts/ci/aplicar-migraciones.sh "$URL" staging
+
+      - name: Aplicar en PRODUCCIÓN lo que falte
+        env:
+          URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$URL" ]; then echo "::error::Falta el secreto SUPABASE_DB_URL."; exit 1; fi
+          bash scripts/ci/aplicar-migraciones.sh "$URL" produccion
+
+      - name: Producción tiene todo lo que el código usa
+        env:
+          URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          psql "$URL" -X -A -t -c "$(node scripts/probar-esquema.mjs --consulta)" > esquema.txt
+          node scripts/probar-esquema.mjs esquema.txt
+
+      - name: El público sigue sin ver lo que no debe (solo lectura)
+        env:
+          URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: psql "$URL" -X -v ON_ERROR_STOP=1 -q -f scripts/ci/probar-rls-lectura.sql
