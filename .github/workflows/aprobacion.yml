@@ -1,11 +1,18 @@
-name: Aprobación (archivos delicados)
+name: Aprobación (archivos delicados y migraciones críticas)
 
 # Puerta de seguridad, además de CODEOWNERS (dos candados distintos, por si
-# uno falla). Un PR que toca archivos DELICADOS (scripts/ci/delicados.txt:
-# base de datos, despliegue, permisos, dependencias, motor de cruce) solo
-# puede fusionarse si Lau lo aprobó en su versión actual. Un PR que no toca
-# nada delicado pasa solo, y con el resto del CI en verde se fusiona por
-# auto-merge sin esperar a nadie.
+# uno falla). Un PR necesita la aprobación de Lau si:
+#   - toca archivos DELICADOS (scripts/ci/delicados.txt: despliegue,
+#     permisos, CI, dependencias, motor de cruce, acceso a la base), o
+#   - trae una migración CRÍTICA (crear tabla, políticas RLS, funciones
+#     security definer, permisos, tipos, not null, tocar datos; ver
+#     scripts/clasificar-migracion.mjs).
+# Un PR que no toca nada de eso (textos, catálogos, interfaz, docs,
+# migraciones aditivas) pasa solo, y con el resto del CI en verde se
+# fusiona por auto-merge sin esperar a nadie.
+#
+# La lista de delicados y el clasificador se leen de MAIN, no del PR: así
+# un PR no puede aflojar la regla que lo evalúa.
 #
 # Se vuelve a evaluar cada vez que alguien aprueba o hace push, así el
 # check se pone en verde en cuanto Lau aprueba.
@@ -13,7 +20,7 @@ name: Aprobación (archivos delicados)
 on:
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   pull_request_review:
     types: [submitted, dismissed]
 
@@ -34,37 +41,48 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      - name: ¿Toca archivos delicados?
+      - name: ¿Toca archivos delicados o trae una migración crítica?
         id: delicados
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --name-only "$BASE" "$HEAD" > cambios.txt
-          tr -d '\r' < scripts/ci/delicados.txt | grep -vE '^\s*(#|$)' > patrones.txt
+          # Reglas desde MAIN (no desde el PR).
+          git show "$BASE:scripts/ci/delicados.txt" | tr -d '\r' | grep -vE '^\s*(#|$)' > patrones.txt
+          git show "$BASE:scripts/clasificar-migracion.mjs" > clasificar.mjs 2>/dev/null || cp scripts/clasificar-migracion.mjs clasificar.mjs
           : > delicados.txt
           while read -r ruta; do
             if [[ "$ruta" == */ ]]; then grep -E "^${ruta}" cambios.txt >> delicados.txt || true
             else grep -Fx "$ruta" cambios.txt >> delicados.txt || true; fi
           done < patrones.txt
+          # Migraciones nuevas: solo las críticas cuentan como delicadas.
+          NUEVAS=$(git diff --name-only --diff-filter=A "$BASE" "$HEAD" -- supabase/migrations | tr -d '\r')
+          if [ -n "$NUEVAS" ]; then
+            node clasificar.mjs $NUEVAS > niveles.txt || true
+            cat niveles.txt
+            awk -F'\t' '$1 == "critica" || $1 == "prohibida" {print $2 "  (migración " $1 ": " $3 ")"}' niveles.txt >> delicados.txt
+          fi
           sort -u delicados.txt -o delicados.txt
           if [ -s delicados.txt ]; then
-            echo "Este PR toca archivos delicados:"; sed 's/^/  - /' delicados.txt
+            echo "Este PR necesita aprobación de Lau por:"; sed 's/^/  - /' delicados.txt
             echo "hay=si" >> "$GITHUB_OUTPUT"
           else
-            echo "No toca nada delicado: puede fusionarse solo cuando el CI esté en verde."
+            echo "No toca nada delicado ni trae migraciones críticas: puede fusionarse solo cuando el CI esté en verde."
             echo "hay=no" >> "$GITHUB_OUTPUT"
           fi
 
       - name: ¿Lau aprobó esta versión?
-        # Si el PR lo abrió la propia Lau, no hay a quién pedirle aprobación:
-        # pasa (GitHub no deja aprobarse a uno mismo).
-        if: steps.delicados.outputs.hay == 'si' && github.event.pull_request.user.login != 'LAHoyosC'
+        if: steps.delicados.outputs.hay == 'si'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           HEAD: ${{ github.event.pull_request.head.sha }}
+          AUTOR: ${{ github.event.pull_request.user.login }}
           DUENA: LAHoyosC
         run: |
           # Última reseña de Lau; tiene que ser APPROVED y sobre el commit actual
@@ -73,16 +91,26 @@ jobs:
             --jq "[.[] | select(.user.login == \"$DUENA\") | select(.state == \"APPROVED\" or .state == \"CHANGES_REQUESTED\" or .state == \"DISMISSED\")] | last | \"\(.state) \(.commit_id)\"")
           echo "Última reseña de $DUENA: ${ULTIMA:-ninguna}"
           if [ "$ULTIMA" = "APPROVED $HEAD" ]; then
-            echo "OK: aprobado por $DUENA en la versión actual."
-          else
-            {
-              echo "### 🔒 Este PR necesita la aprobación de @$DUENA"
-              echo
-              echo "Toca archivos delicados (no se arreglan con un Revert):"
-              sed 's/^/- `/; s/$/`/' delicados.txt
-              echo
-              echo "Explica en la descripción por qué. Cuando @$DUENA apruebe, este check se pone en verde solo."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Este PR toca archivos delicados y necesita la aprobación de @$DUENA sobre el commit actual ($HEAD). No es un error de tu código: es la regla. Explica el cambio en el PR y espera la aprobación."
-            exit 1
+            echo "OK: aprobado por $DUENA en la versión actual."; exit 0
           fi
+          # Si el PR lo abrió la propia Lau, GitHub no la deja aprobarse a sí
+          # misma: en su lugar pone la etiqueta «aprobado-por-lau» desde la web
+          # (un humano, un clic). Un agente en su máquina no debe fusionar
+          # cosas críticas sin que ella lo vea.
+          if [ "$AUTOR" = "$DUENA" ]; then
+            if gh api "repos/${{ github.repository }}/pulls/$PR" --jq '.labels[].name' | grep -qx 'aprobado-por-lau'; then
+              echo "OK: PR de $DUENA con etiqueta aprobado-por-lau."; exit 0
+            fi
+            echo "::error::Este PR lo abrió $DUENA y toca algo crítico. Para fusionarlo, ella pone la etiqueta «aprobado-por-lau» en la web del PR (así consta que lo vio un humano)."
+          else
+            echo "::error::Este PR toca archivos delicados o trae una migración crítica y necesita la aprobación de @$DUENA sobre el commit actual ($HEAD). No es un error de tu código: es la regla. Explica el cambio en el PR y espera la aprobación."
+          fi
+          {
+            echo "### 🔒 Este PR necesita la aprobación de @$DUENA"
+            echo
+            echo "Motivos (no se arreglan con un Revert):"
+            sed 's/^/- `/; s/$/`/' delicados.txt
+            echo
+            echo "Explica en la descripción por qué. Cuando @$DUENA apruebe (o, si es suyo, ponga la etiqueta \`aprobado-por-lau\`), este check se pone en verde solo."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1

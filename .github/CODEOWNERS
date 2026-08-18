@@ -2,14 +2,16 @@
 #
 # Solo lo delicado (lo que no se arregla con un Revert) exige la aprobación
 # de Lau. Lo demás se fusiona solo cuando el CI está en verde (auto-merge).
-# La lista canónica está en scripts/ci/delicados.txt: mantén las dos iguales.
+# La lista canónica está en scripts/ci/delicados.txt: el CI comprueba que
+# las dos sean iguales. Las migraciones NO están aquí: el check «aprobacion»
+# exige a Lau solo para las críticas (scripts/clasificar-migracion.mjs).
 
-/supabase/migrations/        @LAHoyosC
 /.github/                    @LAHoyosC
 /.claude/                    @LAHoyosC
 /scripts/ci/                 @LAHoyosC
 /scripts/build.mjs           @LAHoyosC
 /scripts/probar-esquema.mjs  @LAHoyosC
+/scripts/clasificar-migracion.mjs @LAHoyosC
 /scripts/probar-cruce.mjs    @LAHoyosC
 /wrangler.jsonc              @LAHoyosC
 /.env.production             @LAHoyosC

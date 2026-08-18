@@ -100,8 +100,9 @@ Cada cambio queda en la tabla `historial`.
   de **staging** (franja morada «ENTORNO DE PRUEBAS»). Producción solo cambia
   al mergear.
 - Los cambios de esquema van como archivos en
-  [`supabase/migrations/`](supabase/migrations/), se aplican **primero en
-  staging**, se prueban en la vista previa, y solo después en producción.
+  [`supabase/migrations/`](supabase/migrations/): solo se agregan, nunca
+  borran nada, el CI los prueba desde cero y sobre datos, y al fusionar los
+  aplica solo en staging y producción (`migrar.yml`).
 - Cómo contribuir (flujo, CI, qué necesita aprobación): [**CONTRIBUIR.md**](CONTRIBUIR.md). Claude lee [**CLAUDE.md**](CLAUDE.md).
 - Guía completa de montaje y operación: [**DESPLIEGUE.md**](DESPLIEGUE.md).
 - Qué sigue y en qué orden: [**ROADMAP.md**](ROADMAP.md).
@@ -126,7 +127,8 @@ Voluntaria de prueba: `pruebas.huellasacasa@gmail.com` (solo existe en staging).
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
 | `verificar.yml` | cada PR | Tres checks: `compilar` (motor + build prod y staging), `base-de-datos` (aplica todas las migraciones desde cero en un Postgres limpio y comprueba que el código encuentra sus columnas), `revisar` (sin secretos, migraciones solo agregadas, sin archivos generados). No publica nada. |
-| `aprobacion.yml` | cada PR y cada reseña | Si el PR toca archivos delicados (`scripts/ci/delicados.txt`) exige la aprobación de Lau; si no, pasa solo. Con los cuatro checks en verde el PR se fusiona por auto-merge. |
+| `aprobacion.yml` | cada PR y cada reseña | Si el PR toca archivos delicados (`scripts/ci/delicados.txt`) o trae una migración crítica (`scripts/clasificar-migracion.mjs`) exige la aprobación de Lau; si no, pasa solo. Con los cuatro checks en verde el PR se fusiona por auto-merge. |
+| `migrar.yml` | al fusionar a main con migraciones | Aplica en staging y producción solo las migraciones que faltan (tabla `migraciones_aplicadas`), y comprueba esquema y RLS contra la base real. Nadie corre `db push`. |
 | `respaldo-fotos.yml` | domingos | Copia las fotos nuevas del bucket R2 al mismo repo privado (`fotos/`). Nunca borra. Necesita `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` y `CF_ACCOUNT_ID`. |
 | `vigia.yml` | cada mañana | Cuenta fichas, búsquedas, tamaño de la base y peticiones al Worker, y comprueba que producción tenga todas las migraciones que el código usa; escribe un resumen (Actions → el run → Summary) y **falla a propósito (= correo)** si algo pasa un umbral: Worker > 70 % del tope diario, base > 400 MB, más de 30 fichas sin verificar. |
 | `respaldo.yml` | cada noche, 2 a.m. | `pg_dump` completo al repositorio privado. 30 diarios + 1 mensual permanente. |

@@ -12,9 +12,10 @@ necesita la aprobación de Lau. Si trabajas con Claude,
 ## Las 5 cosas que nunca se hacen
 
 1. **Trabajar sobre `main`.** Siempre una rama nueva.
-2. **Tocar la base de producción.** Ni un `select`. Lo que necesite base va
-   como archivo en `supabase/migrations/` y **Lau lo aplica**.
-3. **Editar o borrar una migración que ya existe.** Solo se agregan nuevas.
+2. **Tocar la base de producción a mano.** Ni un `select`. Lo que necesite base
+   va como archivo en `supabase/migrations/` y **el CI lo aplica** al fusionar.
+3. **Editar o borrar una migración que ya existe.** Solo se agregan nuevas, y
+   **nunca borran nada** (ni tablas, ni columnas, ni filas): el CI las rechaza.
 4. **Subir secretos** (contraseñas, tokens, llaves). El CI lo bloquea.
 5. **`git push --force`**, `--no-verify`, `wrangler deploy`. Nunca.
 
@@ -57,8 +58,11 @@ Si el cambio que quieres hacer choca con alguna, para y pregunta en el PR.
      encuentra todas sus columnas.
    - `revisar` — sin secretos, migraciones solo agregadas, sin archivos
      generados; avisa si tocas algo delicado.
-   - `aprobacion` — si no tocas nada delicado, verde solo. Si tocas algo
-     delicado, rojo hasta que Lau apruebe (no es un error tuyo).
+   - `aprobacion` — si no tocas nada delicado ni traes una migración
+     crítica, verde solo. Si sí, rojo hasta que Lau apruebe (no es un error
+     tuyo).
+   - `staging` (no bloquea) — aplica tus migraciones a la base de pruebas
+     para que la vista previa funcione.
 
    Si algo falla, el mensaje dice qué y cómo arreglarlo. Arreglas, haces
    commit, push, y vuelve a correr solo.
@@ -71,8 +75,9 @@ Si el cambio que quieres hacer choca con alguna, para y pregunta en el PR.
    Si tocas algo delicado, espera la aprobación de Lau: ella puede pedir
    cambios (los haces en la misma rama; la aprobación se pide de nuevo). Si
    trae migración, ella la aplica primero en staging.
-8. **Producción se actualiza sola** en ~1 minuto. Si había migración, Lau la
-   aplica en producción justo después. La rama se borra sola.
+8. **Producción se actualiza sola** en ~1 minuto. Si había migración, el
+   workflow «Migrar» la aplica en producción justo después (y comprueba que
+   todo sigue en orden). La rama se borra sola.
 
 ---
 

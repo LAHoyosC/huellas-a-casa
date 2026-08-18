@@ -9,14 +9,17 @@ name: Verificar (CI)
 #   compilar        npm ci, motor de cruce (npm run probar) y build en los
 #                   dos modos (producción y staging), igual que Cloudflare.
 #
-#   base-de-datos   Levanta un Postgres limpio, aplica TODAS las migraciones
-#                   del repo en orden desde cero (si dos PRs chocan o una
-#                   migración está rota, se ve aquí) y comprueba que existan
-#                   todas las columnas y funciones que el código usa
-#                   (scripts/probar-esquema.mjs).
+#   base-de-datos   Levanta un Postgres limpio; aplica las migraciones que ya
+#                   están en main; carga datos de mentira; aplica SOLO las
+#                   nuevas del PR sobre esos datos (dos veces cada una);
+#                   comprueba que no se perdió ninguna fila, que el código
+#                   encuentra todas sus columnas/funciones
+#                   (scripts/probar-esquema.mjs) y que el público sigue sin
+#                   leer contactos ni poder borrar (scripts/ci/probar-rls.sql).
 #
-#   revisar         Reglas del repo: sin secretos, migraciones solo se
-#                   agregan (nunca se editan ni borran), sin archivos
+#   revisar         Reglas del repo: migraciones solo se agregan (nunca se
+#                   editan ni borran) y nada destructivo (lint por nivel:
+#                   prohibida/crítica/aditiva), sin secretos, sin archivos
 #                   generados, aviso si el PR toca archivos delicados.
 #
 # Hay un cuarto check, en aprobacion.yml: si el PR toca archivos delicados
@@ -75,35 +78,79 @@ jobs:
       URL: postgresql://postgres:ci@localhost:5432/huellas
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Instalar psql
         run: sudo apt-get install -y -q postgresql-client >/dev/null
 
-      - name: Preparar lo mínimo de Supabase (roles, auth, storage)
+      - name: Preparar lo mínimo de Supabase (roles, auth, storage, permisos por defecto)
         run: psql "$URL" -X -v ON_ERROR_STOP=1 -q -f scripts/ci/supabase-minimo.sql
 
-      - name: Aplicar TODAS las migraciones en orden, desde cero (cada una dos veces)
-        # Cada migración se corre dos veces seguidas: si un `db push` se
-        # interrumpe y se repite, no puede romperse. Por eso todo va con
-        # `if not exists`, `create or replace`, `drop ... if exists`.
+      - name: Separar migraciones que ya están en main de las nuevas del PR
+        run: |
+          git ls-tree -r --name-only "origin/${{ github.base_ref }}" supabase/migrations | sort > en_main.txt
+          if [ ! -s en_main.txt ]; then echo "::error::No encontré las migraciones de ${{ github.base_ref }} (¿fetch-depth?)."; exit 1; fi
+          ls supabase/migrations/*.sql | sort > todas.txt
+          comm -13 en_main.txt todas.txt > nuevas.txt
+          echo "En main: $(wc -l < en_main.txt) · Nuevas en este PR: $(wc -l < nuevas.txt)"
+          cat nuevas.txt
+
+      # Cada migración se corre dos veces seguidas: si un `db push` se
+      # interrumpe y se repite, no puede romperse. Por eso todo va con
+      # `if not exists`, `create or replace`, `drop ... if exists`.
+      - name: 1/4 Aplicar desde cero las migraciones que ya están en main
         run: |
           set -e
-          for f in $(ls supabase/migrations/*.sql | sort); do
+          while read -r f; do
+            [ -z "$f" ] && continue
+            echo "==> $f"
+            psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" || { echo "::error file=$f::Una migración YA fusionada falla desde cero. Esto no lo causó tu PR: avisa a Lau."; exit 1; }
+            SALIDA=$(psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" 2>&1) || { echo "$SALIDA" | grep -v NOTICE; echo "::error file=$f::Migración ya fusionada no re-ejecutable. Avisa a Lau."; exit 1; }
+          done < en_main.txt
+          echo "OK: $(wc -l < en_main.txt) migraciones de main aplicadas."
+
+      - name: 2/4 Cargar datos de mentira (todas las columnas y estados)
+        run: |
+          psql "$URL" -X -v ON_ERROR_STOP=1 -q -f scripts/ci/semilla.sql
+          psql "$URL" -X -A -t -c "select 'mascotas='||(select count(*) from mascotas)||' busquedas='||(select count(*) from busquedas)||' historial='||(select count(*) from historial)||' voluntarios='||(select count(*) from voluntarios)" | tee antes.txt
+
+      - name: 3/4 Aplicar SOLO las migraciones nuevas del PR sobre esos datos (dos veces cada una)
+        run: |
+          set -e
+          if [ ! -s nuevas.txt ]; then echo "Este PR no trae migraciones nuevas."; exit 0; fi
+          while read -r f; do
+            [ -z "$f" ] && continue
             echo "==> $f"
             psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" || {
-              echo "::error file=$f::Esta migración falla al aplicarse sobre las anteriores. Arréglala en este PR (no edites las ya fusionadas: agrega otra)."; exit 1; }
+              echo "::error file=$f::Esta migración falla al aplicarse sobre la base con datos. Puede ser un 'set not null' o un 'check' que las filas viejas no cumplen. Arréglala en este PR."; exit 1; }
             SALIDA=$(psql "$URL" -X -v ON_ERROR_STOP=1 -q -f "$f" 2>&1) || {
               echo "$SALIDA" | grep -v NOTICE
               echo "::error file=$f::Esta migración no se puede correr dos veces seguidas. Usa 'if not exists', 'create or replace', 'drop ... if exists'."; exit 1; }
-          done
-          echo "OK: $(ls supabase/migrations/*.sql | wc -l) migraciones aplicadas sin errores, y cada una es re-ejecutable."
+          done < nuevas.txt
+          echo "OK: migraciones nuevas aplicadas sobre datos, y cada una es re-ejecutable."
+
+      - name: 4/4 Ninguna fila se perdió
+        run: |
+          psql "$URL" -X -A -t -c "select 'mascotas='||(select count(*) from mascotas)||' busquedas='||(select count(*) from busquedas)||' historial='||(select count(*) from historial)||' voluntarios='||(select count(*) from voluntarios)" | tee despues.txt
+          # historial solo puede crecer; el resto debe ser igual.
+          A=$(sed 's/ historial=[0-9]*//' antes.txt); D=$(sed 's/ historial=[0-9]*//' despues.txt)
+          if [ "$A" != "$D" ]; then
+            echo "::error::Después de aplicar las migraciones del PR cambió el número de filas: antes «$(cat antes.txt)», después «$(cat despues.txt)». Aquí nada se borra."; exit 1
+          fi
+          echo "OK: mismas filas antes y después."
 
       - name: El código encuentra todas sus columnas y funciones
         run: |
           psql "$URL" -X -A -t -c "$(node scripts/probar-esquema.mjs --consulta)" > esquema.txt
           node scripts/probar-esquema.mjs esquema.txt
+
+      - name: El público no lee contactos ni borra nada (prueba de RLS)
+        run: |
+          psql "$URL" -X -v ON_ERROR_STOP=1 -q -f scripts/ci/probar-rls.sql || {
+            echo "::error::La prueba de permisos (scripts/ci/probar-rls.sql) falló: alguna migración abre algo que debe estar cerrado, o le falta un grant/revoke. Lee el assert de arriba."; exit 1; }
 
   revisar:
     name: revisar
@@ -139,6 +186,29 @@ jobs:
             fi
           done
           echo "OK"
+
+      - name: "Migraciones nuevas: nada destructivo (lint por nivel)"
+        # prohibida -> error. critica -> aviso (exige aprobación de Lau: lo
+        # comprueba el check «aprobacion»). aditiva -> pasa sola.
+        # La tabla de niveles está en scripts/clasificar-migracion.mjs y en CLAUDE.md §4.
+        run: |
+          NUEVAS=$(awk '$1 == "A" && $2 ~ /^supabase\/migrations\// {print $2}' cambios.txt)
+          if [ -z "$NUEVAS" ]; then echo "Sin migraciones nuevas."; exit 0; fi
+          node scripts/clasificar-migracion.mjs $NUEVAS | tee niveles.txt || true
+          if grep -q "^prohibida" niveles.txt; then
+            echo "::error::Migración PROHIBIDA: aquí nada se borra (ni tablas, ni columnas, ni filas), no se apaga RLS ni se hace update sin where. Si necesitas quitar algo, deja de usarlo en el código y déjalo en la base; si de verdad hay que borrarlo, habla con Lau."
+            grep "^prohibida" niveles.txt | sed 's/^/  - /'
+            exit 1
+          fi
+          if grep -q "^critica" niveles.txt; then
+            echo "::warning::Migración CRÍTICA (crea tabla, toca RLS/permisos/funciones security definer/tipos/datos): pasa las pruebas pero necesita la aprobación de Lau (check «aprobacion»). Explica en el PR por qué."
+            grep "^critica" niveles.txt | sed 's/^/  - /'
+            { echo "### 🔒 Migración crítica: necesita aprobación de Lau"; echo; grep "^critica" niveles.txt | awk -F'\t' '{print "- `"$2"` — "$3}'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if grep -q "^aditiva" niveles.txt; then
+            echo "Migraciones aditivas (solo agregan): con el CI en verde se fusionan y aplican solas."
+            grep "^aditiva" niveles.txt | sed 's/^/  - /'
+          fi
 
       - name: Sin secretos ni credenciales
         run: |
@@ -181,6 +251,15 @@ jobs:
             echo "OK: no toca archivos delicados. Con el CI en verde se puede fusionar solo (auto-merge)."
           fi
 
+      - name: delicados.txt y CODEOWNERS dicen lo mismo
+        run: |
+          tr -d '\r' < scripts/ci/delicados.txt | grep -vE '^\s*(#|$)' | sed 's#^#/#; s#/$##' | sort > a.txt
+          tr -d '\r' < .github/CODEOWNERS | grep -E '^/' | awk '{print $1}' | sed 's#/$##' | sort > b.txt
+          if ! diff a.txt b.txt; then
+            echo "::error::scripts/ci/delicados.txt y .github/CODEOWNERS no coinciden (arriba: < solo en delicados, > solo en CODEOWNERS). Deben ser la misma lista."; exit 1
+          fi
+          echo "OK: misma lista."
+
       - name: Dependencias nuevas
         run: |
           if grep -qE '^M\s+package\.json' cambios.txt; then
@@ -189,3 +268,26 @@ jobs:
             fi
           fi
           echo "OK"
+
+  # No es obligatorio para fusionar. Aplica en STAGING las migraciones nuevas
+  # del PR (ya validadas arriba) para que la vista previa de Cloudflare, que
+  # usa esa base, funcione con el cambio. Staging es desechable: si dos PRs
+  # se pisan ahí, no pasa nada; producción solo cambia al fusionar (migrar.yml).
+  staging:
+    name: staging (aplicar las migraciones del PR a la base de pruebas)
+    needs: [base-de-datos, revisar]
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    concurrency:
+      group: staging-migraciones
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar psql
+        run: sudo apt-get install -y -q postgresql-client >/dev/null
+      - name: Aplicar en staging lo que falte
+        env:
+          URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+        run: |
+          if [ -z "$URL" ]; then echo "::warning::Sin secreto SUPABASE_STAGING_DB_URL: la vista previa no tendrá las migraciones nuevas hasta que Lau las aplique en staging."; exit 0; fi
+          bash scripts/ci/aplicar-migraciones.sh "$URL" staging

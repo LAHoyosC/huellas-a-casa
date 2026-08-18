@@ -20,7 +20,20 @@
       "Bash(npx supabase db reset:*)",
       "Bash(rm -rf:*)",
       "Read(./.env)",
-      "Read(./.env.local)"
+      "Read(./.env.local)",
+      "Bash(git checkout --ours:*)",
+      "Bash(git checkout --theirs:*)",
+      "Bash(git merge -X ours:*)",
+      "Bash(git merge -X theirs:*)",
+      "Bash(git merge --strategy-option:*)",
+      "Bash(git push origin +:*)",
+      "Bash(git push * +:*)",
+      "Bash(git update-ref:*)",
+      "Bash(git push origin *:main)",
+      "Bash(gh pr merge --admin:*)",
+      "Bash(gh pr edit --add-label aprobado-por-lau:*)",
+      "Bash(gh api -X DELETE:*)",
+      "Bash(gh api --method DELETE:*)"
     ],
     "ask": [
       "Bash(git push:*)",
