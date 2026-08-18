@@ -65,23 +65,34 @@ verdes.
 
 ---
 
-## Parte 3 — Primer voluntario
+## Parte 3 — Voluntarios (alta, baja, contraseña)
 
-Para que alguien pueda aprobar fichas y marcar reencuentros:
+Cualquiera registra animales, pero solo un voluntario con sesión aprueba
+fichas, marca reencuentros y ve el panel (enlace «Voluntarios» arriba a la
+derecha de la página).
 
-1. Supabase → **Authentication** → **Users** → **Add user** → correo y
-   contraseña de la persona.
-2. **SQL Editor**, con el correo de la persona:
+1. Supabase → **Authentication → Users → Add user → Create new user**: correo
+   y contraseña, y marca **Auto Confirm User** (así no depende de un correo
+   de confirmación).
+2. En el **SQL Editor**, con el correo de esa persona:
 
    ```sql
    insert into voluntarios (id, nombre, refugio)
    select id, 'Nombre', 'Refugio' from auth.users where email = 'correo@ejemplo.com';
    ```
 
-(Todavía no hay pantalla de inicio de sesión en la página; es lo siguiente
-en la lista. Ver CONTEXTO.md.)
+3. Prueba que entra (o pídele que entre) antes de darlo por hecho.
+
+- Desactivar: `update voluntarios set activo = false where id = '...'`.
+- Cambiar contraseña: Authentication → Users → ⋯ → Reset password. La
+  persona también puede pedirla desde la página («¿Olvidaste tu contraseña?»).
+- Pasa la contraseña por un canal privado, nunca en un grupo.
+
+Es una de las pocas cosas que se hacen a mano en producción; no toques nada
+más desde el panel de Supabase.
 
 ---
+
 ## Cuando algo cambia en el código
 
 Cada merge a `main` vuelve a publicar la página solo. Los PR se prueban
@@ -103,13 +114,44 @@ base (lo decide `scripts/build.mjs`) y muestra una franja morada «ENTORNO
 DE PRUEBAS». Los datos que se registren ahí no son reales y se pueden
 borrar.
 
-Regla: **todo cambio de esquema se aplica primero en staging**, se prueba
-en la URL de vista previa del PR, y solo después se aplica en producción y
-se mergea.
+Regla: **ningún cambio de esquema se aplica a mano.** Va como archivo nuevo
+en `supabase/migrations/`, el CI lo prueba desde cero, lo aplica a staging al
+abrir el PR y a producción al fusionar (`migrar.yml`, tabla
+`migraciones_aplicadas`). Detalle en [CONTRIBUIR.md](CONTRIBUIR.md).
 
-Aplicar migraciones con la CLI (requiere `npx supabase login`):
+---
 
-```bash
-npx supabase link --project-ref jvgcwbxwjxtmkpdhyjcv   # staging
-npx supabase db push
-```
+## Operación
+
+### Workflows automáticos
+
+| Workflow | Cuándo | Qué hace |
+|---|---|---|
+| `verificar.yml` | cada PR | Tres checks: `compilar` (motor + build prod y staging), `base-de-datos` (aplica todas las migraciones desde cero en un Postgres limpio, sobre datos, y comprueba que el código encuentra sus columnas y que la RLS se cumple), `revisar` (sin secretos, migraciones solo agregadas, sin archivos generados). No publica nada. |
+| `aprobacion.yml` | cada PR y cada reseña | Si el PR toca archivos delicados (`scripts/ci/delicados.txt`) o trae una migración crítica (`scripts/clasificar-migracion.mjs`) exige la aprobación de Lau; si no, pasa solo. Con los checks en verde el PR se fusiona por auto-merge. |
+| `migrar.yml` | al fusionar a main con migraciones | Aplica en staging y producción solo las migraciones que faltan y comprueba esquema y RLS contra la base real. Nadie corre `db push`. |
+| `vigia.yml` | cada mañana | Cuenta fichas, búsquedas, tamaño de la base y peticiones al Worker, y comprueba que producción tenga todas las migraciones que el código usa; escribe un resumen (Actions → el run → Summary) y **falla a propósito (= correo)** si algo pasa un umbral: Worker > 70 % del tope diario, base > 400 MB, más de 30 fichas sin verificar. |
+| `respaldo.yml` | cada noche, 2 a.m. | `pg_dump` completo al repositorio privado `huellas-a-casa-respaldos`. 30 diarios + 1 mensual permanente. |
+| `respaldo-fotos.yml` | domingos | Copia las fotos nuevas del bucket R2 al mismo repo privado (`fotos/`). Nunca borra. Necesita `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` y `CF_ACCOUNT_ID`. |
+| `mantener-activo.yml` | cada día | Consulta la base para que Supabase no pause el proyecto por inactividad. |
+
+Si alguno falla, GitHub avisa por correo a los administradores.
+
+### Límites de los planes gratuitos
+
+| Recurso | Dónde | Límite | Qué significa aquí |
+|---|---|---|---|
+| Base de datos | Supabase | 500 MB | Muchísimo. Son solo datos, no fotos. |
+| Fotos | Cloudflare R2 | 10 GB, salida gratis | ~45.000 mascotas. Ver fotos no gasta cuota. |
+| Peticiones del Worker | Cloudflare | 100.000 al día | Cada foto vista es una petición: alcanza para varios miles de visitas diarias. Si se pasa, ese día no salen fotos (la página y la búsqueda siguen). |
+
+`src/lib/foto.js` comprime a ~200 KB y guarda una miniatura de 320 px aparte:
+el listado usa la miniatura, la grande solo se carga al abrir la ficha.
+
+Dónde mirar: Cloudflare → Workers & Pages → huellas-a-casa → Metrics; y el
+botón «Panel» de la página (solo voluntarios).
+
+### Si algo sale mal en producción
+
+Revert del PR que lo causó desde GitHub (ver [CONTRIBUIR.md](CONTRIBUIR.md)).
+Hay respaldo diario de la base y semanal de las fotos.
