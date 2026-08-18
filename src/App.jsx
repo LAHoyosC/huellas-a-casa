@@ -7,7 +7,7 @@ import { extraerConceptos, etiquetaDe } from "./lib/conceptos.js";
 import { sugerirDesdeNota } from "./lib/sugerencias.js";
 import {
   ESPECIE, TAMANO, TAMANO_PISTA, COLOR, COLOR_MUESTRA, PELO, SEXO, EDAD,
-  OREJAS, COLA, SENAS, COLOR_COLLAR, CUSTODIO, MUNICIPIOS, RAZA, RAZA_INDEFINIDA,
+  OREJAS, COLA, SENAS, SENAS_CON_LUGAR, COLOR_COLLAR, CUSTODIO, MUNICIPIOS, BARRIOS, RAZA, RAZA_INDEFINIDA,
 } from "./lib/catalogo.js";
 
 const T = {
@@ -97,7 +97,7 @@ function CampoContacto({ medio, valor, onMedio, onValor, placeholderNombre }) {
 // Campos de la ficha que se pueden escribir desde el formulario. Al editar
 // solo se envian estos: nunca id, codigo, estado, verificado ni fechas.
 const CAMPOS_FICHA = [
-  "especie", "tamano", "color", "pelo", "sexo", "edad", "orejas", "cola", "senas", "collar_color",
+  "especie", "tamano", "color", "pelo", "sexo", "edad", "orejas", "cola", "senas", "senas_donde", "collar_color",
   "departamento", "municipio", "barrio", "fecha_hallazgo", "custodio", "lugar",
   "contacto_nombre", "contacto_telefono", "contacto_medio", "nota", "lugar_mapa", "fuente_url",
 ];
@@ -345,6 +345,7 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar,
               {senas.map((x) => (
                 <span key={x} style={{ fontSize: 12.5, padding: "4px 9px", borderRadius: 20, background: T.ambarClaro, color: "#8A5A12", fontWeight: 560 }}>{x}</span>
               ))}
+              {r.senas_donde && <span style={{ fontSize: 13, alignSelf: "center", color: T.tintaSuave }}>{r.senas_donde}</span>}
             </div>
           )}
 
@@ -513,6 +514,7 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
                   background: T.ambarClaro, color: "#8A5A12", fontWeight: 560,
                 }}>{s}</span>
               ))}
+              {r.senas_donde && <span style={{ fontSize: 12.5, alignSelf: "center", color: T.tintaSuave }}>{r.senas_donde}</span>}
             </div>
           )}
 
@@ -828,7 +830,7 @@ function EstadoCaso({ codigoInicial, registros, voluntario, acciones, onBuscarDe
             </div>
             <div style={{ fontSize: 13.5, color: T.tintaSuave, marginTop: 3 }}>
               {[caso.barrio, caso.municipio, caso.departamento].filter(Boolean).join(", ") || "Sin zona"}
-              {(caso.senas || []).length ? ` · ${caso.senas.join(", ")}` : ""}
+              {(caso.senas || []).length ? ` · ${caso.senas.join(", ")}` : ""}{caso.senas_donde ? ` (${caso.senas_donde})` : ""}
             </div>
             {caso.nota && <p style={{ margin: "8px 0 0", fontSize: 13.5, fontStyle: "italic" }}>“{caso.nota}”</p>}
             <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.55 }}>
@@ -893,7 +895,7 @@ function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
       <div style={{ fontSize: 15.5, fontWeight: 660, marginTop: 4 }}>{rasgos || "Sin rasgos marcados"}</div>
       <div style={{ fontSize: 13.5, color: T.tintaSuave, marginTop: 3 }}>
         {[b.barrio, b.municipio, b.departamento].filter(Boolean).join(", ") || "Sin zona"}
-        {(b.senas || []).length ? ` · ${b.senas.join(", ")}` : ""}
+        {(b.senas || []).length ? ` · ${b.senas.join(", ")}` : ""}{b.senas_donde ? ` (${b.senas_donde})` : ""}
       </div>
       {b.nota && <p style={{ margin: "8px 0 0", fontSize: 13.5, fontStyle: "italic" }}>“{b.nota}”</p>}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" }}>
@@ -1134,7 +1136,9 @@ function Rasgos({ v, set, desde = 1 }) {
   const n = (i) => String(desde + i).padStart(2, "0");
   const alterna = (s) => {
     const actual = v.senas || [];
-    set("senas", actual.includes(s) ? actual.filter((x) => x !== s) : [...actual, s]);
+    const nuevas = actual.includes(s) ? actual.filter((x) => x !== s) : [...actual, s];
+    set("senas", nuevas);
+    if (!nuevas.some((x) => SENAS_CON_LUGAR.includes(x))) set("senas_donde", null);
   };
   return (
     <>
@@ -1174,8 +1178,15 @@ function Rasgos({ v, set, desde = 1 }) {
       <Campo numero={n(8)} titulo="Señas particulares" ayuda="Marca todas las que apliquen." opcional>
         {SENAS.map((o) => <Opcion key={o} activo={(v.senas || []).includes(o)} onClick={() => alterna(o)}>{o}</Opcion>)}
       </Campo>
+      {(v.senas || []).some((x) => SENAS_CON_LUGAR.includes(x)) && (
+        <Campo numero={`${n(8)}b`} titulo="¿Dónde tiene la cicatriz o el tatuaje?"
+          ayuda="Con tus palabras: en qué parte del cuerpo y cómo se ve." opcional>
+          <input style={entradaTexto} value={v.senas_donde || ""} maxLength={120}
+            onChange={(e) => set("senas_donde", e.target.value)} placeholder="Ej.: cicatriz en la pata trasera derecha, tatuaje en la oreja" />
+        </Campo>
+      )}
       {(v.senas || []).includes("Llevaba collar") && (
-        <Campo numero={`${n(8)}b`} titulo="Color del collar" opcional>
+        <Campo numero={`${n(8)}c`} titulo="Color del collar" opcional>
           {COLOR_COLLAR.map((o) => <Opcion key={o} activo={v.collar_color === o} onClick={() => set("collar_color", o)}>{o}</Opcion>)}
         </Campo>
       )}
@@ -1828,8 +1839,13 @@ export default function App() {
             <Zona v={reporte} set={setR} numero="01" />
 
             <Campo numero="02" titulo="Barrio o vereda donde apareció">
-              <input style={entradaTexto} value={reporte.barrio || ""}
+              <input style={entradaTexto} value={reporte.barrio || ""} list="barrios-sugeridos"
                 onChange={(e) => setR("barrio", e.target.value)} placeholder="Ej.: Cuba" />
+              {BARRIOS[reporte.municipio] && (
+                <datalist id="barrios-sugeridos">
+                  {BARRIOS[reporte.municipio].map((b) => <option key={b} value={b} />)}
+                </datalist>
+              )}
             </Campo>
 
             <Rasgos v={reporte} set={setR} desde={3} />
