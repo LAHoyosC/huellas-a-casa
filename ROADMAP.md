@@ -38,10 +38,8 @@ pero no urgente.
 
 ## Después (próximas 2-3 semanas) — lo que más reencuentros produce
 
-- [x] **Estado del caso para el tutor** (PR #24, 18-ago-2026): consulta por
-      número de registro, estado, rasgos, fichas parecidas hoy y «ya
-      apareció — cerrar». Pendiente: que pueda actualizar su contacto.
-- [ ] **Refugios como tabla propia** (pedido del equipo, 18-ago-2026). Hoy
+- [ ] **Refugios como tabla propia — SIGUIENTE PASO** (pedido del equipo,
+      18-ago-2026; priorizado por Lau). Hoy
       «Nombre del refugio o del sitio» es texto libre en cada ficha, así que
       no se puede filtrar bien ni evitar que el mismo refugio quede escrito
       de tres formas. Plan:
@@ -57,6 +55,9 @@ pero no urgente.
         que quien recibe animales solo tenga que marcar los rasgos y la foto.
       - Después: que cada voluntario tenga un refugio «por defecto», y que el
         panel muestre cifras por refugio.
+- [x] **Estado del caso para el tutor** (PR #24, 18-ago-2026): consulta por
+      número de registro, estado, rasgos, fichas parecidas hoy y «ya
+      apareció — cerrar». Pendiente: que pueda actualizar su contacto.
 - [ ] **Preguntar cuándo y dónde se perdió** en la búsqueda. Un animal
       recogido *antes* de perderse no puede ser el tuyo: filtro duro que
       hoy no existe. Columna `fecha_perdida` en `busquedas`.
