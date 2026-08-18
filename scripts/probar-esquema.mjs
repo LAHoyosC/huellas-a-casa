@@ -25,7 +25,7 @@ import { readFileSync } from "node:fs";
 
 export const CONSULTA_ESQUEMA = `
   select table_name || '.' || column_name from information_schema.columns
-   where table_schema = 'public' and table_name in ('mascotas','busquedas','voluntarios','historial')
+   where table_schema = 'public' and table_name in ('mascotas','busquedas','voluntarios','historial','refugios')
   union all
   select 'funcion:' || p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
@@ -60,6 +60,11 @@ for (const c of ["id", "codigo", "estado", "verificado", "creado_en", "foto_url"
 // Lo que el Worker pide a mascotas para la vista previa de /m/<codigo>.
 const sel = worker.match(/searchParams\.set\("select",\s*"([^"]+)"\)/);
 if (sel) for (const c of sel[1].split(",")) ficha.add(c.trim());
+// Refugios: lo que escribe el panel de voluntarios (CAMPOS_REFUGIO en App.jsx).
+const refugio = new Set(literal("CAMPOS_REFUGIO"));
+for (const c of ["id", "activo", "creado_en"]) refugio.add(c);
+// Lo que la sesión lee del voluntario (src/lib/sesion.js).
+const voluntario = new Set(["id", "nombre", "refugio", "refugio_id", "activo"]);
 // Funciones RPC.
 const funciones = new Set([...app.matchAll(/\.rpc\("([a-z_]+)"/g)].map((m) => m[1]));
 
@@ -67,6 +72,8 @@ const esperado = [
   ...[...ficha].map((c) => `mascotas.${c}`),
   ...[...compartidos].flatMap((c) => [`mascotas.${c}`, `busquedas.${c}`]),
   ...[...busqueda].map((c) => `busquedas.${c}`),
+  ...[...refugio].map((c) => `refugios.${c}`),
+  ...[...voluntario].map((c) => `voluntarios.${c}`),
   ...[...funciones].map((f) => `funcion:${f}`),
 ];
 

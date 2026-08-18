@@ -36,8 +36,25 @@ pero no urgente.
 
 ## Después (próximas 2-3 semanas) — lo que más reencuentros produce
 
-- [ ] **Refugios como tabla propia — SIGUIENTE PASO** (pedido del equipo,
-      18-ago-2026; priorizado por Lau). Hoy
+- [x] **Refugios como tabla propia** (PR #30, 19-ago-2026): tabla `refugios`,
+      `refugio_id` en fichas y voluntarios, selector con autollenado al
+      registrar, filtro por refugio, sección «Refugios» en el panel (agregar,
+      editar, asignar fichas con el sitio escrito a mano, crear refugio desde
+      una ficha), refugio por defecto del voluntario. Semilla: Albergue
+      Gestora Social de Risaralda y Bomberos, con sus fichas enlazadas.
+      Pendiente: cifras por refugio en el panel; que los voluntarios elijan su
+      refugio por defecto desde la página (hoy lo pone Lau en la base).
+- [ ] **Hogares de paso** (pedido de los albergues, 18-ago-2026): un `tipo`
+      más en `refugios` («Hogar de paso») con capacidad, qué acepta y si está
+      disponible; formulario público «Quiero ser hogar de paso» (entra
+      inactivo hasta que un voluntario lo revise) y lista en el panel para
+      contactarlos. Contacto solo para voluntarios.
+- [ ] **Adopciones** (idea, 18-ago-2026): un estado más de la ficha
+      («en adopción») que un voluntario pone cuando pasa ~1-1,5 meses sin
+      reencuentro; el vigía avisa las que llevan más de 45 días. Sección
+      pública apagada hasta decidir reglas (quién decide, qué pasa si aparece
+      el tutor, requisitos). Primero el estado interno + aviso.
+- [ ] Refugios, detalle original del plan (19-ago-2026, hecho arriba). Hoy
       «Nombre del refugio o del sitio» es texto libre en cada ficha, así que
       no se puede filtrar bien ni evitar que el mismo refugio quede escrito
       de tres formas. Plan:

@@ -92,3 +92,20 @@ begin
     where b.id = s.id and b.codigo is null;
   end if;
 end $$;
+
+-- Refugios (si la tabla ya existe en main): dos activos y uno cerrado, y
+-- la mitad de las fichas en resguardo enlazadas al primero.
+do $$
+declare r1 uuid; r2 uuid;
+begin
+  if to_regclass('public.refugios') is null then return; end if;
+  insert into refugios (nombre, tipo, departamento, municipio, barrio, direccion, contacto_telefono, contacto_medio, responsable, activo)
+  values ('Albergue CI', 'Refugio', 'Risaralda', 'Pereira', 'Cuba', 'Calle 1 # 2-3', '3005550001', 'WhatsApp', 'Ana', true),
+         ('Veterinaria CI', 'Veterinaria', 'Risaralda', 'Dosquebradas', 'Centro', null, '3005550002', 'WhatsApp', null, true),
+         ('Refugio cerrado CI', 'Refugio', 'Risaralda', 'Pereira', null, null, null, 'WhatsApp', null, false)
+  on conflict ((lower(trim(nombre)))) do nothing;
+  select id into r1 from refugios where nombre = 'Albergue CI';
+  update mascotas set refugio_id = r1, lugar = 'Albergue CI', custodio = 'Refugio'
+   where refugio_id is null and estado = 'resguardo' and custodio = 'Refugio';
+  update voluntarios set refugio_id = r1 where id = '00000000-0000-0000-0000-000000000001';
+end $$;

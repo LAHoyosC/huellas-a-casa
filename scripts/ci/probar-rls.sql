@@ -167,4 +167,53 @@ end $$;
 
 reset role;
 reset request.jwt.claim.sub;
+
+-- ============================================================
+-- Refugios (si la tabla existe): el público ve solo los activos y no
+-- los crea ni edita; una voluntaria activa sí; nadie borra.
+-- ============================================================
+do $$
+declare n bigint; total bigint; activos bigint;
+begin
+  if to_regclass('public.refugios') is null then return; end if;
+  select count(*), count(*) filter (where activo) into total, activos from refugios;
+
+  set local role anon;
+  select count(*) into n from refugios;
+  assert n = activos, format('anon ve %s refugios; debería ver solo los activos (%s)', n, activos);
+  begin
+    insert into refugios (nombre) values ('Refugio colado por anon');
+    raise exception 'anon puede crear refugios';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update refugios set nombre = 'x' where activo;
+    get diagnostics n = row_count;
+    assert n = 0, 'anon puede editar refugios';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from refugios;
+    raise exception 'anon puede borrar refugios';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
+  select count(*) into n from refugios;
+  assert n = total, 'una voluntaria activa no ve todos los refugios (incluidos los cerrados)';
+  insert into refugios (nombre, tipo, municipio) values ('Refugio creado por voluntaria', 'Refugio', 'Pereira');
+  update refugios set notas = 'editado' where nombre = 'Refugio creado por voluntaria';
+  get diagnostics n = row_count;
+  assert n = 1, 'una voluntaria activa no puede editar refugios';
+  begin
+    delete from refugios where nombre = 'Refugio creado por voluntaria';
+    raise exception 'una voluntaria puede borrar refugios';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+end $$;
+reset role;
+
 select 'RLS OK: el público no lee contactos ni borra; los voluntarios activos sí trabajan.' as resultado;
