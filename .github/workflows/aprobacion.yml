@@ -42,7 +42,7 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --name-only "$BASE" "$HEAD" > cambios.txt
-          tr -d '' < scripts/ci/delicados.txt | grep -vE '^\s*(#|$)' > patrones.txt
+          tr -d '\r' < scripts/ci/delicados.txt | grep -vE '^\s*(#|$)' > patrones.txt
           : > delicados.txt
           while read -r ruta; do
             if [[ "$ruta" == */ ]]; then grep -E "^${ruta}" cambios.txt >> delicados.txt || true

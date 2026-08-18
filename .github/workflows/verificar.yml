@@ -171,7 +171,7 @@ jobs:
 
       - name: Aviso si toca archivos delicados (necesitan aprobación de Lau)
         run: |
-          tr -d '' < scripts/ci/delicados.txt | grep -vE '^\s*(#|$)' > patrones.txt
+          tr -d '\r' < scripts/ci/delicados.txt | grep -vE '^\s*(#|$)' > patrones.txt
           : > delicados.txt
           while read -r ruta; do
             if [[ "$ruta" == */ ]]; then awk '{print $2}' cambios.txt | grep -E "^${ruta}" >> delicados.txt || true
