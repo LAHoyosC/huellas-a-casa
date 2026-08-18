@@ -977,6 +977,15 @@ export default function App() {
   const [duplicados, setDuplicados] = useState(null);
   const [avisoFoto, setAvisoFoto] = useState("");
   const [detalleId, setDetalleId] = useState(null);
+
+  // Lleva a la politica de datos (el aviso del inicio) desde cualquier parte.
+  function irAlAviso(e) {
+    if (e) e.preventDefault();
+    setDetalleId(null);
+    setModo("inicio");
+    if (window.location.pathname !== "/") history.replaceState(null, "", "/#aviso");
+    setTimeout(() => document.getElementById("aviso")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
   const [editandoId, setEditandoId] = useState(null);
   const [fueEdicion, setFueEdicion] = useState(false);
   const editando = editandoId ? registros.find((x) => x.id === editandoId) : null;
@@ -1046,6 +1055,8 @@ export default function App() {
 
   // Se recarga al entrar o salir un voluntario: cambia lo que la base le deja ver.
   useEffect(() => { cargar(); }, [voluntario?.id]);
+  // Si llegan directo a /#aviso (enlace a la politica de datos), desplazarse ahi.
+  useEffect(() => { if (window.location.hash === "#aviso") setTimeout(() => irAlAviso(), 300); }, []);
   useEffect(() => {
     sesionActual().then(setSesion);
     return alCambiarSesion(setSesion);
@@ -1388,7 +1399,7 @@ export default function App() {
 
             <p style={{ margin: "0 0 12px 25px", fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
               Si dejas un contacto, autorizas que los voluntarios lo usen solo para avisarte.{" "}
-              <a href="#aviso" onClick={() => setModo("inicio")} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
+              <a href="/#aviso" onClick={irAlAviso} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
             <button type="button" onClick={buscar} style={{
               background: T.verde, color: T.blanco, border: "none", borderRadius: 10,
@@ -1611,7 +1622,7 @@ export default function App() {
             <p style={{ margin: "12px 0 0 25px", fontSize: 13, color: T.tintaSuave, lineHeight: 1.5 }}>
               Al guardar, autorizas que el contacto se publique en la ficha, solo para
               reunir al animal con su familia.{" "}
-              <a href="#aviso" onClick={() => setModo("inicio")} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
+              <a href="/#aviso" onClick={irAlAviso} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
           </section>
         )}
@@ -1668,6 +1679,7 @@ export default function App() {
           <span style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".12em", alignSelf: "center" }}>CONTACTO</span>
           <a href={CONTACTO_WHATSAPP} target="_blank" rel="noreferrer" style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_CELULAR}</a>
           <a href={`mailto:${CONTACTO_DATOS}`} style={{ color: T.verde, fontWeight: 620 }}>{CONTACTO_DATOS}</a>
+          <a href="/#aviso" onClick={irAlAviso} style={{ color: T.tintaSuave, textDecoration: "underline" }}>Política de datos y quiénes somos</a>
         </div>
       </footer>
       {detalle && (
