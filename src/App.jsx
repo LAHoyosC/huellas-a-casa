@@ -623,10 +623,12 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
 
 // Panel de uso para voluntarios: cuanto entra, cuanto se busca, que hay
 // pendiente. Las busquedas solo las devuelve la base a voluntarios (RLS).
-function Panel({ registros }) {
+function Panel({ registros, voluntario, acciones }) {
   const [busquedas, setBusquedas] = useState(null);
+  // Que tarjeta esta desplegada (su lista se muestra debajo de las tarjetas).
+  const [abierta, setAbierta] = useState(null);
   useEffect(() => {
-    supabase.from("busquedas").select("creado_en, especie, municipio, contacto_telefono, estado")
+    supabase.from("busquedas").select("*")
       .order("creado_en", { ascending: false }).limit(2000)
       .then(({ data }) => setBusquedas(data || []));
   }, []);
@@ -643,7 +645,6 @@ function Panel({ registros }) {
   };
   const fichasDia = porDia(registros);
   const busqDia = porDia(busquedas);
-  const cuenta = (f) => registros.filter(f).length;
   const desde = (h) => Date.now() - h * 3600000;
   const n = (v) => <strong style={{ fontWeight: 700, fontSize: 24, display: "block", lineHeight: 1.1 }}>{v}</strong>;
 
@@ -665,18 +666,56 @@ function Panel({ registros }) {
   };
 
   const tarjeta = { border: `1px solid ${T.linea}`, borderRadius: 11, background: T.blanco, padding: "12px 14px", fontSize: 13, color: T.tintaSuave };
+
+  // Cada tarjeta: que cuenta y que lista despliega al tocarla.
+  const B = busquedas || [];
+  const TARJETAS = [
+    { id: "resguardo", texto: "en resguardo", fichas: registros.filter((r) => r.estado === "resguardo") },
+    { id: "sin_verificar", texto: "sin verificar", borde: T.ambar, fichas: registros.filter((r) => r.estado === "resguardo" && !r.verificado) },
+    { id: "reencontrados", texto: "reencontrados", fichas: registros.filter((r) => r.estado === "reencontrado") },
+    { id: "ocultas", texto: "ocultas", fichas: registros.filter((r) => r.estado === "oculto") },
+    { id: "fichas_24h", texto: "fichas últimas 24 h", fichas: registros.filter((r) => new Date(r.creado_en) > desde(24)) },
+    { id: "busq_24h", texto: "búsquedas últimas 24 h", busquedas: B.filter((b) => new Date(b.creado_en) > desde(24)) },
+    { id: "busq_contacto", texto: "búsquedas con contacto para avisar", borde: T.verde, busquedas: B.filter((b) => b.contacto_telefono) },
+    { id: "sin_foto", texto: "fichas sin foto", fichas: registros.filter((r) => !r.foto_thumb_url) },
+  ];
+  const activa = TARJETAS.find((t) => t.id === abierta);
+  const enResguardo = registros.filter((r) => r.estado === "resguardo");
+
   return (
     <section style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-        <div style={tarjeta}>{n(cuenta((r) => r.estado === "resguardo"))}en resguardo</div>
-        <div style={{ ...tarjeta, borderColor: T.ambar }}>{n(cuenta((r) => r.estado === "resguardo" && !r.verificado))}sin verificar</div>
-        <div style={tarjeta}>{n(cuenta((r) => r.estado === "reencontrado"))}reencontrados</div>
-        <div style={tarjeta}>{n(cuenta((r) => r.estado === "oculto"))}ocultas</div>
-        <div style={tarjeta}>{n(cuenta((r) => new Date(r.creado_en) > desde(24)))}fichas últimas 24 h</div>
-        <div style={tarjeta}>{n(busquedas ? busquedas.filter((b) => new Date(b.creado_en) > desde(24)).length : "…")}búsquedas últimas 24 h</div>
-        <div style={tarjeta}>{n(busquedas ? busquedas.filter((b) => b.contacto_telefono).length : "…")}búsquedas con contacto para avisar</div>
-        <div style={tarjeta}>{n(cuenta((r) => !r.foto_thumb_url))}fichas sin foto</div>
+        {TARJETAS.map((t) => {
+          const total = t.busquedas ? (busquedas ? t.busquedas.length : "…") : t.fichas.length;
+          const activo = abierta === t.id;
+          return (
+            <button key={t.id} type="button" onClick={() => setAbierta(activo ? null : t.id)} style={{
+              ...tarjeta, textAlign: "left", cursor: "pointer", fontFamily: FUENTE,
+              borderColor: activo ? T.tinta : (t.borde || T.linea), borderWidth: activo ? 2 : 1,
+              background: activo ? T.papelHondo : T.blanco,
+            }}>
+              {n(total)}{t.texto}
+              <span style={{ display: "block", fontSize: 11, marginTop: 4, color: T.tintaSuave }}>{activo ? "▲ ocultar" : "▼ ver lista"}</span>
+            </button>
+          );
+        })}
       </div>
+
+      {activa && (
+        <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".12em", color: T.tintaSuave }}>
+            {String(activa.texto).toUpperCase()} · {activa.busquedas ? activa.busquedas.length : activa.fichas.length}
+          </div>
+          {activa.fichas && activa.fichas.length === 0 && <p style={{ margin: 0, color: T.tintaSuave, fontSize: 14 }}>Nada por aquí.</p>}
+          {activa.fichas && activa.fichas.map((r) => (
+            <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} {...acciones} />
+          ))}
+          {activa.busquedas && activa.busquedas.length === 0 && <p style={{ margin: 0, color: T.tintaSuave, fontSize: 14 }}>Nada por aquí.</p>}
+          {activa.busquedas && activa.busquedas.map((b) => (
+            <Busqueda key={b.id} b={b} enResguardo={enResguardo} voluntario={voluntario} acciones={acciones} />
+          ))}
+        </div>
+      )}
       <div style={{ ...tarjeta, display: "grid", gap: 18, gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
         <Barras datos={fichasDia} color={T.ambar} titulo="FICHAS NUEVAS POR DÍA" />
         <Barras datos={busqDia} color={T.verde} titulo="BÚSQUEDAS POR DÍA" />
@@ -686,6 +725,51 @@ function Panel({ registros }) {
         (Workers & Pages → huellas-a-casa → Metrics) y en el vigía diario del repositorio (Actions → Vigía).
       </p>
     </section>
+  );
+}
+
+// Una busqueda guardada, tal como la dejo el tutor, con su contacto y las
+// fichas en resguardo que hoy se le parecen (cruce inverso). Solo voluntarios.
+function Busqueda({ b, enResguardo, voluntario, acciones }) {
+  const [verParecidas, setVerParecidas] = useState(false);
+  const parecidas = useMemo(() => buscarCoincidencias(b, enResguardo).filter((x) => x.resultado.valor >= 55), [b, enResguardo]);
+  const rasgos = [b.especie, b.raza && !RAZA_INDEFINIDA.includes(b.raza) ? b.raza : null, b.tamano, b.color, b.pelo ? `pelo ${b.pelo.toLowerCase()}` : null,
+    b.sexo && b.sexo !== "No sé" ? b.sexo : null, b.edad, b.orejas ? `orejas ${b.orejas.toLowerCase()}` : null, b.cola ? `cola ${b.cola.toLowerCase()}` : null,
+    b.collar_color ? `collar ${b.collar_color.toLowerCase()}` : null].filter(Boolean).join(" · ");
+  const fecha = new Date(b.creado_en).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return (
+    <article style={{ background: T.blanco, border: `1px solid ${T.linea}`, borderLeft: `4px solid ${T.verde}`, borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: T.tintaSuave }}>BÚSQUEDA · {fecha}{b.estado && b.estado !== "abierta" ? ` · ${b.estado.toUpperCase()}` : ""}</div>
+        {b.nombres && <div style={{ fontSize: 13.5 }}>Responde a <strong>{b.nombres}</strong></div>}
+      </div>
+      <div style={{ fontSize: 15.5, fontWeight: 660, marginTop: 4 }}>{rasgos || "Sin rasgos marcados"}</div>
+      <div style={{ fontSize: 13.5, color: T.tintaSuave, marginTop: 3 }}>
+        {[b.barrio, b.municipio, b.departamento].filter(Boolean).join(", ") || "Sin zona"}
+        {(b.senas || []).length ? ` · ${b.senas.join(", ")}` : ""}
+      </div>
+      {b.nota && <p style={{ margin: "8px 0 0", fontSize: 13.5, fontStyle: "italic" }}>“{b.nota}”</p>}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" }}>
+        {b.contacto_telefono ? (
+          <a href={enlaceContacto(b.contacto_medio, b.contacto_telefono)} target="_blank" rel="noreferrer" style={{
+            background: T.verde, color: T.blanco, textDecoration: "none", padding: "8px 13px", borderRadius: 8, fontSize: 13.5, fontWeight: 640,
+          }}>Avisar por {b.contacto_medio || "WhatsApp"}: {b.contacto_telefono}</a>
+        ) : (
+          <span style={{ fontSize: 13, color: T.tintaSuave }}>No dejó contacto</span>
+        )}
+        <button type="button" onClick={() => setVerParecidas((v) => !v)} style={botonSecundario(parecidas.length ? T.verde : T.tintaSuave)}>
+          {parecidas.length ? `${parecidas.length} ficha${parecidas.length > 1 ? "s" : ""} parecida${parecidas.length > 1 ? "s" : ""} hoy` : "Nada parecido hoy"}
+          {parecidas.length ? (verParecidas ? " ▲" : " ▼") : ""}
+        </button>
+      </div>
+      {verParecidas && parecidas.length > 0 && (
+        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          {parecidas.slice(0, 5).map(({ ficha, resultado }) => (
+            <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={b.nombres} voluntario={voluntario} {...acciones} />
+          ))}
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -1627,7 +1711,10 @@ export default function App() {
           </section>
         )}
 
-        {modo === "panel" && voluntario && <Panel registros={registros} />}
+        {modo === "panel" && voluntario && (
+          <Panel registros={registros} voluntario={voluntario}
+            acciones={{ onReencontrar: marcarReencontrado, onAprobar: aprobar, onOcultar: ocultar, onMostrar: mostrarDeNuevo, onVer: verFicha }} />
+        )}
 
         {modo === "lista" && (
           <section>
