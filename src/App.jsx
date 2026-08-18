@@ -1432,14 +1432,6 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // Un voluntario con refugio propio arranca la ficha nueva ahi (solo si el
-  // formulario esta en blanco: no pisa una edicion ni algo ya elegido).
-  useEffect(() => {
-    if (modo !== "reportar" || editandoId || reporte.refugio_id !== undefined) return;
-    const ref = voluntario?.refugio_id ? refugioDe(voluntario.refugio_id) : null;
-    if (ref) { setReporte((p) => fichaDesdeRefugio(p, ref)); if (ref.lugar_mapa) setMostrarMapa(true); }
-  }, [modo, editandoId, voluntario?.refugio_id, refugios.length]);
-
   function cancelarEdicion() {
     setEditandoId(null);
     setReporte({ senas: [], contacto_medio: "WhatsApp", fecha_hallazgo: new Date().toISOString().slice(0, 10) });
@@ -1484,6 +1476,14 @@ export default function App() {
     await cargarRefugios();
     return "";
   }
+
+  // Un voluntario con refugio propio arranca la ficha nueva ahi (solo si el
+  // formulario esta en blanco: no pisa una edicion ni algo ya elegido).
+  useEffect(() => {
+    if (modo !== "reportar" || editandoId || reporte.refugio_id !== undefined) return;
+    const ref = voluntario?.refugio_id ? refugioDe(voluntario.refugio_id) : null;
+    if (ref) { setReporte((p) => fichaDesdeRefugio(p, ref)); if (ref.lugar_mapa) setMostrarMapa(true); }
+  }, [modo, editandoId, voluntario?.refugio_id, refugios.length]);
 
   // Asignar una ficha (con el sitio escrito a mano) a un refugio.
   async function asignarRefugio(r, refugioId) {
