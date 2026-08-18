@@ -27,8 +27,16 @@ pero no urgente.
 - [ ] **Regla de límite de subidas** en Cloudflare (WAF → Rate limiting,
       el plan gratis incluye una): p. ej. 20 subidas por IP cada 10 min en
       `/api/fotos/*`. Hoy no hay tope.
+- [ ] **Fusionar el PR #19 (vigía diario)** y correrlo una vez a mano.
+      Para que reporte las peticiones al Worker: crear en Cloudflare un API
+      token de solo lectura de analíticas y guardarlo con el Account ID como
+      secretos `CF_API_TOKEN` / `CF_ACCOUNT_ID` (pasos en DESPLIEGUE.md).
+- [ ] **Visitas:** activar Cloudflare Web Analytics (gratis, sin cookies) y
+      poner el token en `index.html`. Responsable: Lau crea el sitio en el
+      panel y pasa el token.
 - [ ] **Mirar las métricas** del Worker una vez al día durante la semana
-      de difusión (Cloudflare → Workers & Pages → huellas-a-casa → Metrics).
+      de difusión (Cloudflare → Workers & Pages → huellas-a-casa → Metrics)
+      y el panel de la página (botón «Panel», solo voluntarios).
 
 ## Después (próximas 2-3 semanas) — lo que más reencuentros produce
 
@@ -83,7 +91,8 @@ pero no urgente.
 - 17-ago-2026 — PR #17 (en revisión): compartir con foto en WhatsApp
   (`/m/PER-0012`), contacto del grupo, foto borrosa hasta aprobación,
   voluntarios ven y restauran ocultas, campo raza, regla 4 del cruce,
-  sugerencias desde la nota, `npm run probar`.
+  sugerencias desde la nota, `npm run probar`, panel de uso para voluntarios.
+- 17-ago-2026 — PR #19 (en revisión): vigía diario con alarma por correo.
 - 17-ago-2026 — #16 recuperar contraseña; #14 ficha completa; #15 contacto
   sin nombre, datos de prueba en staging, edición de fichas.
 - 16-ago-2026 — #11 inicio de sesión de voluntarios; #12 foto antes de la
