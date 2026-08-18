@@ -78,6 +78,8 @@ jobs:
       URL: postgresql://postgres:ci@localhost:5432/huellas
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -90,6 +92,7 @@ jobs:
       - name: Separar migraciones que ya están en main de las nuevas del PR
         run: |
           git ls-tree -r --name-only "origin/${{ github.base_ref }}" supabase/migrations | sort > en_main.txt
+          if [ ! -s en_main.txt ]; then echo "::error::No encontré las migraciones de ${{ github.base_ref }} (¿fetch-depth?)."; exit 1; fi
           ls supabase/migrations/*.sql | sort > todas.txt
           comm -13 en_main.txt todas.txt > nuevas.txt
           echo "En main: $(wc -l < en_main.txt) · Nuevas en este PR: $(wc -l < nuevas.txt)"
