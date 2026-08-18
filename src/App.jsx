@@ -746,6 +746,127 @@ function Panel({ registros, voluntario, acciones }) {
 
 // Una busqueda guardada, tal como la dejo el tutor, con su contacto y las
 // fichas en resguardo que hoy se le parecen (cruce inverso). Solo voluntarios.
+// Estado del caso: el tutor consulta su busqueda con el numero de registro.
+// Pasa por la funcion consultar_busqueda de la base, que devuelve solo esa
+// busqueda, por codigo exacto y SIN el contacto. Se puede abrir con el
+// enlace .../#BUS-7K3MQ.
+function EstadoCaso({ codigoInicial, registros, voluntario, acciones, onBuscarDeNuevo }) {
+  const [codigo, setCodigo] = useState(codigoInicial || "");
+  const [caso, setCaso] = useState(null);      // undefined = no existe
+  const [cargando, setCargando] = useState(false);
+  const [cerrando, setCerrando] = useState(false);
+
+  async function consultar(c) {
+    const limpio = (c || "").trim().toUpperCase().replace(/^BUS[\s-]*/, "BUS-");
+    if (!limpio) return;
+    setCargando(true);
+    const { data } = await supabase.rpc("consultar_busqueda", { p_codigo: limpio });
+    setCaso(data && data[0] ? data[0] : undefined);
+    setCargando(false);
+    if (data && data[0]) history.replaceState(null, "", `/#${data[0].codigo}`);
+  }
+  useEffect(() => { if (codigoInicial) consultar(codigoInicial); }, [codigoInicial]);
+
+  async function cerrar() {
+    if (!confirm("¿Confirmas que tu mascota ya apareció? La búsqueda se marca como resuelta.")) return;
+    setCerrando(true);
+    await supabase.rpc("cerrar_busqueda", { p_codigo: caso.codigo });
+    setCaso((c) => ({ ...c, estado: "resuelta" }));
+    setCerrando(false);
+  }
+
+  const enResguardo = registros.filter((r) => r.estado === "resguardo");
+  const parecidas = useMemo(() => (caso ? buscarCoincidencias(caso, enResguardo) : []), [caso, enResguardo]);
+  const fecha = caso && new Date(caso.creado_en).toLocaleString("es-CO", { day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit" });
+  const rasgos = caso && [caso.especie, caso.raza && !RAZA_INDEFINIDA.includes(caso.raza) ? caso.raza : null, caso.tamano, caso.color,
+    caso.pelo ? `pelo ${caso.pelo.toLowerCase()}` : null, caso.sexo && caso.sexo !== "No sé" ? caso.sexo : null, caso.edad,
+    caso.collar_color ? `collar ${caso.collar_color.toLowerCase()}` : null].filter(Boolean).join(" · ");
+  const abierta = caso && (!caso.estado || caso.estado === "abierta");
+
+  return (
+    <section style={{ display: "grid", gap: 16 }}>
+      <div style={{ border: `1px solid ${T.linea}`, borderRadius: 13, background: T.blanco, padding: "20px 22px" }}>
+        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 720, letterSpacing: "-.02em" }}>¿Cómo va mi búsqueda?</h2>
+        <p style={{ margin: "6px 0 12px", fontSize: 14.5, color: T.tintaSuave, lineHeight: 1.5 }}>
+          Escribe el número de registro que te dimos al buscar (empieza por BUS-).
+        </p>
+        <form onSubmit={(e) => { e.preventDefault(); consultar(codigo); }} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="BUS-7K3MQ" autoCapitalize="characters"
+            style={{ ...entradaTexto, maxWidth: 220, fontFamily: MONO, letterSpacing: ".06em" }} />
+          <button type="submit" disabled={cargando} style={{
+            background: T.verde, color: T.blanco, border: "none", borderRadius: 9, padding: "11px 18px",
+            fontSize: 15, fontWeight: 660, cursor: "pointer",
+          }}>{cargando ? "Buscando…" : "Consultar"}</button>
+        </form>
+        {caso === undefined && (
+          <p style={{ margin: "12px 0 0", fontSize: 14, color: T.rojo }}>
+            No encontramos ese número. Revisa que esté bien escrito (letras y números, sin ceros ni oes).
+            Si no lo tienes, puedes <a href="#" onClick={(e) => { e.preventDefault(); onBuscarDeNuevo(); }} style={{ color: T.verde }}>hacer la búsqueda de nuevo</a>.
+          </p>
+        )}
+      </div>
+
+      {caso && (
+        <>
+          <article style={{ background: T.blanco, border: `1px solid ${T.linea}`, borderLeft: `4px solid ${abierta ? T.ambar : T.verde}`, borderRadius: 12, padding: "14px 16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, alignItems: "baseline" }}>
+              <div style={{ fontFamily: MONO, fontSize: 12, color: T.tintaSuave }}>{caso.codigo} · registrada el {fecha}</div>
+              <span style={{
+                fontFamily: MONO, fontSize: 11.5, letterSpacing: ".1em", padding: "4px 9px", borderRadius: 6,
+                border: `1.5px solid ${abierta ? T.ambar : T.verde}`, color: abierta ? "#8A5A12" : T.verde,
+              }}>{abierta ? "ABIERTA — SEGUIMOS BUSCANDO" : caso.estado === "resuelta" ? "RESUELTA" : "CERRADA"}</span>
+            </div>
+            <div style={{ display: "flex", gap: 14, marginTop: 6, alignItems: "flex-start" }}>
+              {caso.foto_thumb_url && (
+                <a href={caso.foto_url || caso.foto_thumb_url} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+                  <img src={caso.foto_thumb_url} alt="" style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 9, display: "block", border: `1px solid ${T.linea}` }} />
+                </a>
+              )}
+              <div style={{ fontSize: 16.5, fontWeight: 680 }}>
+                {caso.nombres ? `${caso.nombres} — ` : ""}{rasgos || "Sin rasgos marcados"}
+              </div>
+            </div>
+            <div style={{ fontSize: 13.5, color: T.tintaSuave, marginTop: 3 }}>
+              {[caso.barrio, caso.municipio, caso.departamento].filter(Boolean).join(", ") || "Sin zona"}
+              {(caso.senas || []).length ? ` · ${caso.senas.join(", ")}` : ""}
+            </div>
+            {caso.nota && <p style={{ margin: "8px 0 0", fontSize: 13.5, fontStyle: "italic" }}>“{caso.nota}”</p>}
+            <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.55 }}>
+              {caso.tiene_contacto
+                ? <>Dejaste contacto por {caso.contacto_medio || "WhatsApp"}: si un voluntario ve algo parecido, te escribe por ahí. </>
+                : <>No dejaste contacto, así que nadie puede avisarte: vuelve a esta página de vez en cuando, o{" "}
+                    <a href="#" onClick={(e) => { e.preventDefault(); onBuscarDeNuevo(); }} style={{ color: T.verde }}>haz la búsqueda de nuevo dejando tu WhatsApp</a>. </>}
+              El cruce con los animales que llegan lo hacen los voluntarios a mano por ahora.
+            </p>
+            {abierta && (
+              <div style={{ marginTop: 12 }}>
+                <button type="button" onClick={cerrar} disabled={cerrando} style={botonSecundario(T.verde)}>
+                  {cerrando ? "Guardando…" : "Ya apareció — cerrar mi búsqueda"}
+                </button>
+              </div>
+            )}
+          </article>
+
+          <div>
+            <h3 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 700 }}>
+              {parecidas.length === 0 ? "Hoy no hay fichas parecidas" : `${parecidas.length} ficha${parecidas.length > 1 ? "s" : ""} parecida${parecidas.length > 1 ? "s" : ""} hoy`}
+            </h3>
+            <p style={{ margin: "0 0 12px", fontSize: 13.5, color: T.tintaSuave, lineHeight: 1.5 }}>
+              Se recalcula cada vez que entras, con los animales que hay en resguardo ahora. El porcentaje sale de
+              los datos, no de la foto: mira siempre la imagen.
+            </p>
+            <div style={{ display: "grid", gap: 14 }}>
+              {parecidas.slice(0, 10).map(({ ficha, resultado }) => (
+                <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={caso.nombres} voluntario={voluntario} {...acciones} />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
   const [verParecidas, setVerParecidas] = useState(false);
   const abierta = !b.estado || b.estado === "abierta";
@@ -755,7 +876,13 @@ function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
     b.collar_color ? `collar ${b.collar_color.toLowerCase()}` : null].filter(Boolean).join(" · ");
   const fecha = new Date(b.creado_en).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   return (
-    <article style={{ background: T.blanco, border: `1px solid ${T.linea}`, borderLeft: `4px solid ${T.verde}`, borderRadius: 12, padding: "12px 14px" }}>
+    <article style={{ background: T.blanco, border: `1px solid ${T.linea}`, borderLeft: `4px solid ${T.verde}`, borderRadius: 12, padding: "12px 14px", display: "flex", gap: 14 }}>
+      {b.foto_thumb_url && (
+        <a href={b.foto_url || b.foto_thumb_url} target="_blank" rel="noreferrer" title="Ver la foto grande" style={{ flexShrink: 0 }}>
+          <img src={b.foto_thumb_url} alt="" loading="lazy" style={{ width: 96, height: 96, objectFit: "cover", borderRadius: 9, display: "block", border: `1px solid ${T.linea}` }} />
+        </a>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
         <div style={{ fontFamily: MONO, fontSize: 11, color: T.tintaSuave }}>
           {b.codigo || "BÚSQUEDA"} · {fecha}
@@ -798,6 +925,7 @@ function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
           ))}
         </div>
       )}
+      </div>
     </article>
   );
 }
@@ -892,7 +1020,9 @@ const botonFoto = {
   background: T.blanco, fontSize: 14.5, fontWeight: 560, cursor: "pointer",
 };
 
-function CargarFoto({ archivo, onArchivo, actual }) {
+// sinCamara: para quien busca a su mascota, que no la tiene al frente; solo
+// tiene sentido elegir una foto guardada.
+function CargarFoto({ archivo, onArchivo, actual, sinCamara = false }) {
   const refCamara = useRef(null);
   const refCarrete = useRef(null);
   const [vista, setVista] = useState(actual || null);
@@ -918,11 +1048,13 @@ function CargarFoto({ archivo, onArchivo, actual }) {
           <img src={vista} alt="" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 9, border: `1px solid ${T.linea}` }} />
         )}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <button type="button" onClick={() => refCamara.current?.click()} style={botonFoto}>
-            {archivo ? "Tomar otra" : "Tomar foto"}
-          </button>
+          {!sinCamara && (
+            <button type="button" onClick={() => refCamara.current?.click()} style={botonFoto}>
+              {archivo ? "Tomar otra" : "Tomar foto"}
+            </button>
+          )}
           <button type="button" onClick={() => refCarrete.current?.click()} style={botonFoto}>
-            {archivo ? "Elegir otra" : "Elegir del carrete"}
+            {archivo ? "Elegir otra" : sinCamara ? "Elegir una foto guardada" : "Elegir del carrete"}
           </button>
         </div>
         {/* Con capture el celular abre la camara; sin capture, la galeria. */}
@@ -1157,7 +1289,8 @@ export default function App() {
       // Enlace directo a una ficha: /m/PER-0002 (o #PER-0002, enlaces viejos).
       const porRuta = window.location.pathname.match(/^\/m\/([^/]+)\/?$/);
       const codigo = decodeURIComponent(porRuta ? porRuta[1] : window.location.hash.slice(1));
-      if (codigo && !detalleId) {
+      if (/^BUS-/i.test(codigo)) { setCasoInicial(codigo.toUpperCase()); setModo("caso"); }
+      else if (codigo && !detalleId) {
         const f = (data || []).find((x) => x.codigo === codigo);
         if (f) { setDetalleId(f.id); setModo("lista"); }
         else if (porRuta) setErrorCarga(`No encontramos la ficha ${codigo}. Puede que ya no esté publicada.`);
@@ -1222,19 +1355,36 @@ export default function App() {
 
   // Numero de registro de la ultima busqueda guardada (null si no se guardo).
   const [registroBusqueda, setRegistroBusqueda] = useState(null);
+  // Codigo con el que se abre "¿Como va mi busqueda?" (por enlace #BUS-... o desde el aviso).
+  const [casoInicial, setCasoInicial] = useState("");
+  // Foto opcional que deja el tutor al buscar (para que los voluntarios cotejen).
+  const [fotoBusqueda, setFotoBusqueda] = useState(null);
+  const [guardandoBusqueda, setGuardandoBusqueda] = useState(false);
 
   async function buscar() {
     const activas = registros.filter((r) => r.estado === "resguardo");
     setResultados(buscarCoincidencias(busqueda, activas));
     setRegistroBusqueda(null);
     if (!busqueda.especie) return;
-    // Se guarda con un numero de registro para que el tutor sepa que quedo
-    // recibida y los voluntarios puedan hacerle seguimiento desde el panel.
-    for (let intento = 0; intento < 3; intento++) {
-      const codigo = nuevoCodigoBusqueda();
-      const { error } = await supabase.from("busquedas").insert([{ ...busqueda, codigo, estado: "abierta" }]);
-      if (!error) { setRegistroBusqueda(codigo); return; }
-      if (!/codigo|unique|duplicate/i.test(error.message || "")) return; // otro error: no insistir
+    setGuardandoBusqueda(true);
+    try {
+      // La foto (si la dejo) se sube antes, a su propia carpeta, y se guarda
+      // en el mismo insert: el publico no puede actualizar busquedas.
+      const id = crypto.randomUUID();
+      let urls = {};
+      if (fotoBusqueda) {
+        try { urls = await subirFoto(fotoBusqueda, id, "busquedas"); } catch { /* se guarda sin foto */ }
+      }
+      // Se guarda con un numero de registro para que el tutor sepa que quedo
+      // recibida y los voluntarios puedan hacerle seguimiento desde el panel.
+      for (let intento = 0; intento < 3; intento++) {
+        const codigo = nuevoCodigoBusqueda();
+        const { error } = await supabase.from("busquedas").insert([{ id, ...busqueda, ...urls, codigo, estado: "abierta" }]);
+        if (!error) { setRegistroBusqueda(codigo); setFotoBusqueda(null); return; }
+        if (!/codigo|unique|duplicate/i.test(error.message || "")) return; // otro error: no insistir
+      }
+    } finally {
+      setGuardandoBusqueda(false);
     }
   }
 
@@ -1492,6 +1642,19 @@ export default function App() {
         {modo === "buscar" && !resultados && (
           <section>
             <div style={{
+              display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px",
+              border: `1.5px solid ${T.verde}`, background: T.blanco, borderRadius: 11,
+              padding: "12px 16px", marginBottom: 14,
+            }}>
+              <span style={{ fontSize: 15, flex: 1, minWidth: 200 }}>
+                <strong style={{ fontWeight: 660 }}>¿Ya buscaste antes?</strong> Con tu número BUS-… puedes ver cómo va.
+              </span>
+              <button type="button" onClick={() => { setCasoInicial(""); setModo("caso"); }} style={{
+                background: T.verde, color: T.blanco, border: "none", borderRadius: 9,
+                padding: "11px 16px", fontSize: 15, fontWeight: 660, cursor: "pointer",
+              }}>Consultar mi búsqueda</button>
+            </div>
+            <div style={{
               background: T.ambarClaro, border: "1px solid #EBD9B4", borderRadius: 11,
               padding: "14px 16px", marginBottom: 24, fontSize: 14.5, lineHeight: 1.5,
             }}>
@@ -1507,6 +1670,11 @@ export default function App() {
               valor={busqueda.nota} onCambio={(v) => setB("nota", v)} registro={busqueda} set={setB}
               placeholder="Ej.: renquea de una pata de atrás, tiene una manchita blanca en el pecho"
             />
+
+            <Campo numero="11b" titulo="Foto de tu mascota"
+              ayuda="El algoritmo no la usa para buscar (el cruce es por los datos), pero los voluntarios sí: la comparan a ojo con los animales que llegan. Solo la ven ellos y tú con tu número de registro." opcional>
+              <CargarFoto archivo={fotoBusqueda} onArchivo={setFotoBusqueda} sinCamara />
+            </Campo>
 
             <Campo numero="12" titulo="¿A qué nombre responde?"
               ayuda="No se usa para buscar. Sirve para que el refugio lo llame y confirme." opcional>
@@ -1524,11 +1692,11 @@ export default function App() {
               Si dejas un contacto, autorizas que los voluntarios lo usen solo para avisarte.{" "}
               <a href="/#aviso" onClick={irAlAviso} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
-            <button type="button" onClick={buscar} style={{
-              background: T.verde, color: T.blanco, border: "none", borderRadius: 10,
-              padding: "16px 26px", fontSize: 17, fontWeight: 680, cursor: "pointer",
+            <button type="button" onClick={buscar} disabled={guardandoBusqueda} style={{
+              background: guardandoBusqueda ? T.tintaSuave : T.verde, color: T.blanco, border: "none", borderRadius: 10,
+              padding: "16px 26px", fontSize: 17, fontWeight: 680, cursor: guardandoBusqueda ? "wait" : "pointer",
               marginLeft: 25, marginTop: 6,
-            }}>Buscar coincidencias</button>
+            }}>{guardandoBusqueda ? "Guardando…" : "Buscar coincidencias"}</button>
           </section>
         )}
 
@@ -1563,7 +1731,10 @@ export default function App() {
                       vuelve y agrega tu WhatsApp
                     </a>.</>
                 )}
-                {" "}Si escribes al grupo, menciona este número.
+                {" "}Si escribes al grupo, menciona este número. Y cuando quieras ver cómo va,{" "}
+                <a href={`/#${registroBusqueda}`} onClick={(e) => { e.preventDefault(); setCasoInicial(registroBusqueda); setModo("caso"); }} style={{ color: T.verde, fontWeight: 620 }}>
+                  consulta tu búsqueda aquí
+                </a>{" "}(guarda ese enlace).
               </div>
             )}
             {resultados.length === 0 ? (
@@ -1770,6 +1941,12 @@ export default function App() {
               <a href="/#aviso" onClick={irAlAviso} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
           </section>
+        )}
+
+        {modo === "caso" && (
+          <EstadoCaso codigoInicial={casoInicial} registros={registros} voluntario={voluntario}
+            acciones={{ onReencontrar: marcarReencontrado, onAprobar: aprobar, onOcultar: ocultar, onMostrar: mostrarDeNuevo, onVer: verFicha }}
+            onBuscarDeNuevo={() => { setResultados(null); setModo("buscar"); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
         )}
 
         {modo === "panel" && voluntario && (

@@ -16,7 +16,8 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from "./entorno.js";
 
 const MAXIMO_BYTES = 2 * 1024 * 1024;
 // <entorno>/<id de la ficha>/<sello>-grande.jpg
-const RUTA_VALIDA = /^(prod|staging)\/[A-Za-z0-9-]{1,64}\/\d+-(grande|mini)\.jpg$/;
+// <entorno>/busquedas/<id de la busqueda>/<sello>-grande.jpg  (foto del tutor)
+const RUTA_VALIDA = /^(prod|staging)\/(busquedas\/)?[A-Za-z0-9-]{1,64}\/\d+-(grande|mini)\.jpg$/;
 
 export default {
   async fetch(request, env) {

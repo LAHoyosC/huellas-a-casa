@@ -68,12 +68,16 @@ export async function comprimir(archivo) {
 }
 
 // Sube las dos versiones y devuelve sus direcciones publicas.
-export async function subirFoto(archivo, codigo) {
+// carpeta: "" para fichas (<entorno>/<id>/...), "busquedas" para la foto
+// que deja el tutor al buscar (<entorno>/busquedas/<id>/...). Van aparte
+// para no mezclarse; el respaldo semanal copia el bucket entero.
+export async function subirFoto(archivo, codigo, carpeta = "") {
   const { grande, miniatura } = await comprimir(archivo);
   const sello = Date.now();
+  const base = carpeta ? `${ENTORNO}/${carpeta}/${codigo}` : `${ENTORNO}/${codigo}`;
 
-  const rutaGrande = `${ENTORNO}/${codigo}/${sello}-grande.jpg`;
-  const rutaMini = `${ENTORNO}/${codigo}/${sello}-mini.jpg`;
+  const rutaGrande = `${base}/${sello}-grande.jpg`;
+  const rutaMini = `${base}/${sello}-mini.jpg`;
 
   const [g, m] = await Promise.all([subir(rutaGrande, grande), subir(rutaMini, miniatura)]);
   return { foto_url: g, foto_thumb_url: m };

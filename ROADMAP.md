@@ -38,14 +38,9 @@ pero no urgente.
 
 ## Después (próximas 2-3 semanas) — lo que más reencuentros produce
 
-- [ ] **Estado del caso para el tutor.** Con su número de registro
-      (`BUS-7K3MQ`), que pueda consultar en la página cómo va su búsqueda:
-      si sigue abierta o se marcó resuelta, cuándo se registró, qué rasgos
-      dejó, y las fichas parecidas que hay *hoy* (así no tiene que rehacer
-      la búsqueda cada vez). Requiere una función en la base que devuelva
-      solo esa búsqueda por código exacto (el público no puede leer la tabla)
-      y sin exponer el contacto. Después: que pueda actualizar su contacto o
-      cerrar el caso él mismo («ya apareció»).
+- [x] **Estado del caso para el tutor** (PR #24, 18-ago-2026): consulta por
+      número de registro, estado, rasgos, fichas parecidas hoy y «ya
+      apareció — cerrar». Pendiente: que pueda actualizar su contacto.
 - [ ] **Preguntar cuándo y dónde se perdió** en la búsqueda. Un animal
       recogido *antes* de perderse no puede ser el tuyo: filtro duro que
       hoy no existe. Columna `fecha_perdida` en `busquedas`.
