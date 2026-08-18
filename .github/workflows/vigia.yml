@@ -1,0 +1,127 @@
+name: Vigía (uso y salud diarios)
+
+# Cada mañana mira cuánto se está usando la página y si algo se acerca a
+# un tope gratuito. Escribe un resumen (pestaña Actions -> el run -> Summary)
+# y, si algo pasa un umbral, FALLA A PROPÓSITO: GitHub manda correo cuando
+# un workflow falla, así que sirve de alarma sin configurar nada más.
+#
+# Lo que mide:
+#   - Base (Supabase): fichas por estado, nuevas en 24 h y 7 días, sin
+#     verificar, búsquedas, tamaño de la base frente a los 500 MB gratis.
+#   - Worker (Cloudflare): peticiones de ayer frente a las 100.000/día
+#     gratis. Solo si existen los secretos CF_API_TOKEN y CF_ACCOUNT_ID
+#     (token de solo lectura de analíticas); si no, lo salta y avisa.
+#
+# Umbrales (cámbialos aquí si hace falta):
+#   Worker  > 70 % del tope diario -> alarma
+#   Base    > 400 MB de 500 MB     -> alarma
+#   Fichas sin verificar > 30      -> alarma (se está acumulando revisión)
+
+on:
+  schedule:
+    - cron: "0 13 * * *"   # 8:00 a.m. hora de Colombia
+  workflow_dispatch:
+
+jobs:
+  vigilar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Instalar cliente de Postgres 17
+        run: |
+          sudo apt-get install -y postgresql-common >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y postgresql-client-17 >/dev/null
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Medir la base de datos
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -e
+          if [ -z "$SUPABASE_DB_URL" ]; then echo "::error::Falta el secreto SUPABASE_DB_URL."; exit 1; fi
+          q() { psql "$SUPABASE_DB_URL" -X -A -t -c "$1"; }
+          {
+            echo "TOTAL=$(q "select count(*) from mascotas")"
+            echo "RESGUARDO=$(q "select count(*) from mascotas where estado='resguardo'")"
+            echo "REENCONTRADOS=$(q "select count(*) from mascotas where estado='reencontrado'")"
+            echo "OCULTAS=$(q "select count(*) from mascotas where estado='oculto'")"
+            echo "SIN_VERIFICAR=$(q "select count(*) from mascotas where not verificado and estado='resguardo'")"
+            echo "NUEVAS_24H=$(q "select count(*) from mascotas where creado_en > now() - interval '24 hours'")"
+            echo "NUEVAS_7D=$(q "select count(*) from mascotas where creado_en > now() - interval '7 days'")"
+            echo "CON_FOTO=$(q "select count(*) from mascotas where foto_thumb_url is not null")"
+            echo "BUSQUEDAS=$(q "select count(*) from busquedas")"
+            echo "BUSQUEDAS_24H=$(q "select count(*) from busquedas where creado_en > now() - interval '24 hours'")"
+            echo "BUSQUEDAS_7D=$(q "select count(*) from busquedas where creado_en > now() - interval '7 days'")"
+            echo "VOLUNTARIOS=$(q "select count(*) from voluntarios where activo")"
+            echo "DB_MB=$(q "select round(pg_database_size(current_database())/1048576.0, 1)")"
+            echo "POR_DIA<<FIN"
+            q "select to_char(d, 'DD Mon') || ' | ' || coalesce(m.n,0) || ' | ' || coalesce(b.n,0)
+               from generate_series(current_date - 13, current_date, '1 day') d
+               left join (select creado_en::date f, count(*) n from mascotas group by 1) m on m.f = d
+               left join (select creado_en::date f, count(*) n from busquedas group by 1) b on b.f = d
+               order by d"
+            echo "FIN"
+          } >> "$GITHUB_ENV"
+
+      - name: Medir peticiones al Worker (Cloudflare)
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CF_API_TOKEN" ] || [ -z "$CF_ACCOUNT_ID" ]; then
+            echo "WORKER_AYER=sin datos (faltan los secretos CF_API_TOKEN / CF_ACCOUNT_ID)" >> "$GITHUB_ENV"
+            echo "WORKER_PCT=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          AYER=$(date -u -d "yesterday" +%Y-%m-%d)
+          Q="{\"query\":\"{ viewer { accounts(filter:{accountTag:\\\"$CF_ACCOUNT_ID\\\"}) { workersInvocationsAdaptive(limit:10, filter:{date:\\\"$AYER\\\", scriptName:\\\"huellas-a-casa\\\"}) { sum { requests errors } } } } }\"}"
+          R=$(curl -s https://api.cloudflare.com/client/v4/graphql -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data "$Q")
+          LEER='import sys,json; d=json.load(sys.stdin); a=d["data"]["viewer"]["accounts"][0]["workersInvocationsAdaptive"]; print(sum(x["sum"][sys.argv[1]] for x in a))'
+          REQ=$(echo "$R" | python3 -c "$LEER" requests 2>/dev/null || echo "")
+          ERR=$(echo "$R" | python3 -c "$LEER" errors 2>/dev/null || echo "?")
+          if [ -z "$REQ" ]; then
+            echo "::warning::No se pudo leer Cloudflare: $R"
+            echo "WORKER_AYER=error al consultar Cloudflare" >> "$GITHUB_ENV"
+            echo "WORKER_PCT=0" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          PCT=$((REQ * 100 / 100000))
+          echo "WORKER_AYER=$REQ peticiones ($ERR errores) — $PCT % del tope diario gratis" >> "$GITHUB_ENV"
+          echo "WORKER_PCT=$PCT" >> "$GITHUB_ENV"
+
+      - name: Resumen y alarmas
+        run: |
+          {
+            echo "## Huellas a Casa — vigía del $(TZ=America/Bogota date '+%d %b %Y, %H:%M')"
+            echo
+            echo "| Qué | Valor |"
+            echo "|---|---|"
+            echo "| Fichas en resguardo | **$RESGUARDO** |"
+            echo "| Reencontrados | $REENCONTRADOS |"
+            echo "| Ocultas | $OCULTAS |"
+            echo "| Sin verificar (pendientes de un voluntario) | **$SIN_VERIFICAR** |"
+            echo "| Fichas nuevas: últimas 24 h / 7 días | $NUEVAS_24H / $NUEVAS_7D |"
+            echo "| Fichas con foto | $CON_FOTO de $TOTAL |"
+            echo "| Búsquedas: total / 24 h / 7 días | $BUSQUEDAS / $BUSQUEDAS_24H / $BUSQUEDAS_7D |"
+            echo "| Voluntarios activos | $VOLUNTARIOS |"
+            echo "| Base de datos | $DB_MB MB de 500 MB gratis |"
+            echo "| Worker ayer | $WORKER_AYER |"
+            echo
+            echo "### Últimos 14 días"
+            echo
+            echo "| Día | Fichas nuevas | Búsquedas |"
+            echo "|---|---|---|"
+            echo "$POR_DIA" | sed 's/^/| /; s/$/ |/'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          ALARMA=0
+          if [ "${WORKER_PCT:-0}" -gt 70 ]; then
+            echo "::error::Worker ayer al ${WORKER_PCT} % del tope diario. Considera Workers Paid (US\$5/mes) o paginar el listado."; ALARMA=1
+          fi
+          if python3 -c "import sys; sys.exit(0 if float('$DB_MB') > 400 else 1)"; then
+            echo "::error::La base va en $DB_MB MB de 500 MB gratis."; ALARMA=1
+          fi
+          if [ "$SIN_VERIFICAR" -gt 30 ]; then
+            echo "::error::Hay $SIN_VERIFICAR fichas sin verificar: se acumula la revisión."; ALARMA=1
+          fi
+          exit $ALARMA

@@ -55,6 +55,9 @@ los robots de respaldo y anti-pausa:
 | `SUPABASE_ANON_KEY` | la llave anon / publishable |
 | `SUPABASE_DB_URL` | Supabase → **Connect** → **Session pooler** → URI, con la contraseña puesta. La conexión «directa» no sirve desde GitHub: es solo IPv6. |
 | `RESPALDO_SSH_KEY` | llave privada con permiso de escritura en `huellas-a-casa-respaldos` (ya configurada) |
+| `CF_ACCOUNT_ID` | (opcional, para el vigía) Cloudflare → Workers & Pages → a la derecha, **Account ID** |
+| `R2_ACCESS_KEY_ID` y `R2_SECRET_ACCESS_KEY` | (para el respaldo de fotos) Cloudflare → **R2 → Manage R2 API Tokens → Create API token**, permiso **Object Read only**, bucket `huellas-fotos`. Copia el *Access Key ID* y el *Secret Access Key* (el secreto solo se muestra una vez). |
+| `CF_API_TOKEN` | (opcional, para el vigía) Cloudflare → perfil → **API Tokens → Create Token → Read analytics and logs** (solo lectura). Con estos dos, el vigía diario reporta las peticiones al Worker frente al tope gratis. |
 
 Después, en la pestaña **Actions**, correr a mano una vez **Respaldo de la
 base de datos** y **Mantener el proyecto despierto**. Ambos deben quedar
