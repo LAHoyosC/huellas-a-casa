@@ -103,6 +103,7 @@ Voluntaria de prueba: `pruebas.huellasacasa@gmail.com` (solo existe en staging).
 | Workflow | Cuándo | Qué hace |
 |---|---|---|
 | `verificar.yml` | cada PR | Comprueba que compila. No publica nada. |
+| `vigia.yml` | cada mañana | Cuenta fichas, búsquedas, tamaño de la base y peticiones al Worker; escribe un resumen (Actions → el run → Summary) y **falla a propósito (= correo)** si algo pasa un umbral: Worker > 70 % del tope diario, base > 400 MB, más de 30 fichas sin verificar. |
 | `respaldo.yml` | cada noche, 2 a.m. | `pg_dump` completo al repositorio privado. 30 diarios + 1 mensual permanente. |
 | `mantener-activo.yml` | cada día | Consulta la base para que Supabase no pause el proyecto por inactividad. |
 
