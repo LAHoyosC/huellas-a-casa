@@ -22,9 +22,12 @@ name: Verificar (CI)
 #                   prohibida/crítica/aditiva), sin secretos, sin archivos
 #                   generados, aviso si el PR toca archivos delicados.
 #
-# Hay un cuarto check, en aprobacion.yml: si el PR toca archivos delicados
+#   pagina          Abre la página en Chromium contra la compilación del PR
+#                   y recorre las pantallas: si revienta al cargar, rojo.
+#
+# Hay un quinto check, en aprobacion.yml: si el PR toca archivos delicados
 # (scripts/ci/delicados.txt) exige la aprobación de Lau; si no, pasa solo.
-# Con los cuatro en verde el PR se fusiona (auto-merge, squash).
+# Con los cinco en verde el PR se fusiona (auto-merge, squash).
 #
 # Si algo falla, el mensaje dice qué y cómo arreglarlo. Léelo antes de
 # tocar nada.
@@ -291,3 +294,37 @@ jobs:
         run: |
           if [ -z "$URL" ]; then echo "::warning::Sin secreto SUPABASE_STAGING_DB_URL: la vista previa no tendrá las migraciones nuevas hasta que Lau las aplique en staging."; exit 0; fi
           bash scripts/ci/aplicar-migraciones.sh "$URL" staging
+
+  # La página abierta en un navegador de verdad (Chromium), contra la
+  # compilación de este PR en modo staging: portada, listado desde la base,
+  # los dos formularios, estado del caso, pantalla de voluntarios. Si un
+  # error de JavaScript la deja en blanco, aquí se ve. Un build "en verde"
+  # no lo atrapa: el 18-ago-2026 producción se cayó por uno así.
+  pagina:
+    name: pagina
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Compilar como staging (la vista previa usa esa base)
+        run: npm run build
+        env:
+          WORKERS_CI_BRANCH: vista-previa
+      - name: Servir y abrir la página en el navegador
+        run: |
+          npx vite preview --port 4173 --strictPort > preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -s -o /dev/null http://localhost:4173/ && break; sleep 1; done
+          node scripts/ci/probar-pagina.mjs http://localhost:4173 || {
+            echo "::error::La página se rompe al abrirse en el navegador (ver arriba el paso y el error de JavaScript). Este PR NO puede fusionarse: arréglalo en tu código."; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pantallazo-fallo
+          path: pagina-fallo.png
+          if-no-files-found: ignore

@@ -51,8 +51,8 @@ Si el cambio que quieres hacer choca con alguna, para y pregunta en el PR.
    ```
    Título en español que diga qué cambia para quien usa la página. Ese
    título es lo que queda en la historia.
-5. **Espera el CI** (pestaña *Checks* del PR, ~3 min). Cuatro checks y los
-   cuatro deben estar en verde:
+5. **Espera el CI** (pestaña *Checks* del PR, ~4 min). Cinco checks y los
+   cinco deben estar en verde:
    - `compilar` — el motor de cruce da lo esperado y compila en prod y staging.
    - `base-de-datos` — todas las migraciones corren desde cero y el código
      encuentra todas sus columnas.
@@ -61,6 +61,8 @@ Si el cambio que quieres hacer choca con alguna, para y pregunta en el PR.
    - `aprobacion` — si no tocas nada delicado ni traes una migración
      crítica, verde solo. Si sí, rojo hasta que Lau apruebe (no es un error
      tuyo).
+   - `pagina` — abre tu versión en un navegador de verdad y recorre las
+     pantallas; si revienta, rojo (baja el pantallazo en el run).
    - `staging` (no bloquea) — aplica tus migraciones a la base de pruebas
      para que la vista previa funcione.
 
@@ -71,7 +73,7 @@ Si el cambio que quieres hacer choca con alguna, para y pregunta en el PR.
    registra una ficha o una búsqueda de mentira y confirma que se ve y se
    guarda como esperabas. Marca la casilla en la plantilla.
 7. **Se fusiona.** Si activaste el auto-merge y no tocas nada delicado, en
-   cuanto los cuatro checks estén en verde GitHub lo fusiona solo (squash).
+   cuanto los cinco checks estén en verde GitHub lo fusiona solo (squash).
    Si tocas algo delicado, espera la aprobación de Lau: ella puede pedir
    cambios (los haces en la misma rama; la aprobación se pide de nuevo). Si
    trae migración, ella la aplica primero en staging.

@@ -98,6 +98,18 @@ jobs:
             echo "RLS_MAL=1" >> "$GITHUB_ENV"
           fi
 
+      - name: La página abre bien en un navegador
+        run: |
+          npm ci > /dev/null 2>&1
+          npx playwright install --with-deps chromium > /dev/null 2>&1
+          if node scripts/ci/probar-pagina.mjs https://huellas-a-casa.huellas-a-casa.workers.dev > pagina.log 2>&1; then
+            echo "PAGINA=abre y funciona" >> "$GITHUB_ENV"
+          else
+            cat pagina.log
+            echo "PAGINA=NO CARGA BIEN (ver el paso «La página abre bien»)" >> "$GITHUB_ENV"
+            echo "PAGINA_MAL=1" >> "$GITHUB_ENV"
+          fi
+
       - name: Medir peticiones al Worker (Cloudflare)
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
@@ -143,6 +155,7 @@ jobs:
             echo "| Worker ayer | $WORKER_AYER |"
             echo "| Esquema de la base vs. código | $ESQUEMA |"
             echo "| Permisos del público (RLS) | $RLS |"
+            echo "| La página en el navegador | $PAGINA |"
             echo
             echo "### Últimos 14 días"
             echo
@@ -152,6 +165,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           ALARMA=0
+          if [ "${PAGINA_MAL:-0}" = "1" ]; then
+            echo "::error::La página de producción no carga bien en un navegador. Mira el último PR fusionado y haz Revert si hace falta."; ALARMA=1
+          fi
           if [ "${RLS_MAL:-0}" = "1" ]; then
             echo "::error::En producción el público puede ver o hacer algo que no debe (prueba de RLS). Revisa las políticas YA."; ALARMA=1
           fi
