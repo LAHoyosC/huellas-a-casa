@@ -14,9 +14,8 @@ pero no urgente.
 
 - [x] Fusionar el PR #17 y aplicar la migración `raza` en producción
       (hecho 18-ago-2026).
-- [ ] **Fusionar el PR #22** (número de registro de búsquedas y seguimiento
-      desde el panel). Su migración `busquedas_codigo` ya está aplicada en
-      producción y staging.
+- [x] Fusionar el PR #22 (número de registro de búsquedas y seguimiento
+      desde el panel) — hecho 18-ago-2026.
 - [ ] **Decidir el plan de Cloudflare.** El plan gratis da 100.000
       peticiones al Worker por día; cada foto vista es una. Aguanta unos
       2.500-3.500 visitantes nuevos al día; si se pasa, ese día se quedan
@@ -73,6 +72,8 @@ pero no urgente.
 - [ ] **Recuperación de contraseña por correo:** ya existe la pantalla;
       revisar que el correo de Supabase llegue (remitente, plantilla en
       español).
+- [ ] **Alta de voluntarios desde el panel** (hoy la hace un administrador
+      en Supabase, ver DESPLIEGUE.md). Útil cuando entren más refugios.
 
 ## Más adelante — mejoras al cruce
 
@@ -106,6 +107,12 @@ pero no urgente.
 
 ## Hecho
 
+- 18-ago-2026 — #26 «dónde está la seña» y barrios sugeridos; #28 y #29
+  modelo de contribución: CONTRIBUIR.md, CLAUDE.md, CI con base de datos y
+  RLS, dos carriles (auto-merge / aprobación de Lau), migraciones que se
+  aplican solas al fusionar (`migrar.yml`); #24 estado del caso para el
+  tutor; #25/#27 roadmap; secretos de Cloudflare y vigía en verde; README
+  reescrito y operación movida a DESPLIEGUE.md.
 - 18-ago-2026 — Migraciones `raza` y `busquedas_codigo` aplicadas en
   producción. #20 panel de voluntarios + Web Analytics + enlace a política de
   datos en el pie; #21 panel con listas desplegables, búsquedas con contacto
