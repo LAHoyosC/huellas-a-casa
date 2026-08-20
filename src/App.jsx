@@ -2163,23 +2163,34 @@ export default function App() {
             </Campo>
 
             <Campo numero="13" titulo="¿Dónde está ahora?"
-              ayuda={refugiosActivos.length ? "Si está en un refugio de la lista, elígelo: la ficha se llena sola con el municipio, cómo llegar y el contacto. Si no, elige «Otro sitio»." : undefined}>
+              ayuda={refugiosActivos.length ? "Si está en un refugio de la lista, elígelo: la ficha se llena sola con el municipio, cómo llegar y el contacto. Si está en otra parte (una casa, una veterinaria, la calle), toca «No está en un refugio»." : undefined}>
               {refugiosActivos.length > 0 && (
-                <select value={reporte.refugio_id || (sitioOtro ? "otro" : "")} style={{ ...entradaTexto, marginBottom: 10 }}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === "otro") { setSitioOtro(true); setReporte((p) => fichaDesdeRefugio(p, null)); return; }
-                    const ref = refugioDe(v);
-                    setSitioOtro(false);
-                    setReporte((p) => fichaDesdeRefugio(p, ref));
-                    if (ref?.lugar_mapa) setMostrarMapa(true);
-                  }}>
-                  <option value="">Elige el refugio o sitio…</option>
-                  {refugiosActivos.map((x) => (
-                    <option key={x.id} value={x.id}>{x.nombre}{x.municipio ? ` — ${x.municipio}` : ""}</option>
-                  ))}
-                  <option value="otro">Otro sitio (no está en la lista)</option>
-                </select>
+                <>
+                  <select value={reporte.refugio_id || (sitioOtro ? "otro" : "")} style={{ ...entradaTexto, marginBottom: 10 }}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "otro") { setSitioOtro(true); setReporte((p) => fichaDesdeRefugio(p, null)); return; }
+                      const ref = refugioDe(v);
+                      setSitioOtro(false);
+                      setReporte((p) => fichaDesdeRefugio(p, ref));
+                      if (ref?.lugar_mapa) setMostrarMapa(true);
+                    }}>
+                    <option value="">Elige el refugio o sitio…</option>
+                    {refugiosActivos.map((x) => (
+                      <option key={x.id} value={x.id}>{x.nombre}{x.municipio ? ` — ${x.municipio}` : ""}</option>
+                    ))}
+                    <option value="otro">Otro sitio (no está en la lista)</option>
+                  </select>
+                  {/* El mismo camino que «Otro sitio» del desplegable, pero a la
+                      vista: mucha gente no abre la lista si su sitio no es un refugio. */}
+                  {!sitioOtro && !reporte.refugio_id && (
+                    <div style={{ marginBottom: 10 }}>
+                      <Opcion activo={false} onClick={() => { setSitioOtro(true); setReporte((p) => fichaDesdeRefugio(p, null)); }}>
+                        No está en un refugio
+                      </Opcion>
+                    </div>
+                  )}
+                </>
               )}
               {reporte.refugio_id && (
                 <p style={{ margin: "0 0 4px", fontSize: 13.5, color: T.tintaSuave, lineHeight: 1.5 }}>
