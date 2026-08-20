@@ -286,13 +286,27 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Instalar psql
         run: sudo apt-get install -y -q postgresql-client >/dev/null
       - name: Aplicar en staging lo que falte
         env:
           URL: ${{ secrets.SUPABASE_STAGING_DB_URL }}
+          BASE: ${{ github.event.pull_request.base.sha }}
         run: |
-          if [ -z "$URL" ]; then echo "::warning::Sin secreto SUPABASE_STAGING_DB_URL: la vista previa no tendrá las migraciones nuevas hasta que Lau las aplique en staging."; exit 0; fi
+          # Sin el secreto, este check NO puede quedar en verde si el PR trae
+          # migraciones: la vista previa apuntaría a una base sin el esquema
+          # nuevo y "probar en staging primero" sería mentira (pasó el
+          # 19-ago-2026 con la tabla adopciones). Si el PR no trae migraciones,
+          # no hay nada que aplicar y el aviso basta.
+          nuevas=$(git diff --name-only --diff-filter=A "$BASE"...HEAD -- supabase/migrations | wc -l)
+          if [ -z "$URL" ]; then
+            if [ "$nuevas" -gt 0 ]; then
+              echo "::error::Este PR trae $nuevas migración(es) y falta el secreto SUPABASE_STAGING_DB_URL: la vista previa quedaría contra una base sin el esquema nuevo. Agrega el secreto (Settings → Secrets and variables → Actions) o aplica las migraciones a staging a mano."; exit 1;
+            fi
+            echo "::warning::Sin secreto SUPABASE_STAGING_DB_URL (este PR no trae migraciones, así que no afecta)."; exit 0;
+          fi
           bash scripts/ci/aplicar-migraciones.sh "$URL" staging
 
   # La página abierta en un navegador de verdad (Chromium), contra la
