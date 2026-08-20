@@ -216,4 +216,55 @@ begin
 end $$;
 reset role;
 
+-- ============================================================
+-- Adopciones (si la tabla existe): el público ve solo las disponibles
+-- y no las crea, edita ni borra; una voluntaria activa las maneja.
+-- ============================================================
+do $$
+declare n bigint; disponibles bigint; total bigint; ficha uuid; nueva uuid;
+begin
+  if to_regclass('public.adopciones') is null then return; end if;
+  select id into ficha from mascotas where estado = 'resguardo' limit 1;
+
+  -- Una voluntaria activa marca una mascota en adopción.
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
+  insert into adopciones (mascota_id, notas) values (ficha, 'prueba RLS') returning id into nueva;
+  update adopciones set estado = 'cancelada' where id = nueva;
+  get diagnostics n = row_count;
+  assert n = 1, 'una voluntaria activa no puede editar una adopción';
+  update adopciones set estado = 'disponible' where id = nueva;
+  begin
+    delete from adopciones where id = nueva;
+    raise exception 'una voluntaria puede borrar adopciones';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+
+  select count(*), count(*) filter (where estado = 'disponible') into total, disponibles from adopciones;
+
+  -- El público ve solo las disponibles y no toca nada.
+  set local role anon;
+  select count(*) into n from adopciones;
+  assert n = disponibles, format('anon ve %s adopciones; debería ver solo las disponibles (%s)', n, disponibles);
+  begin
+    insert into adopciones (mascota_id) values (ficha);
+    raise exception 'anon puede crear adopciones';
+  exception when insufficient_privilege or unique_violation then null;
+  end;
+  begin
+    update adopciones set estado = 'entregada' where id = nueva;
+    get diagnostics n = row_count;
+    assert n = 0, 'anon puede editar adopciones';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from adopciones;
+    raise exception 'anon puede borrar adopciones';
+  exception when insufficient_privilege then null;
+  end;
+  reset role;
+end $$;
+reset role;
+
 select 'RLS OK: el público no lee contactos ni borra; los voluntarios activos sí trabajan.' as resultado;
