@@ -49,11 +49,14 @@ pero no urgente.
       disponible; formulario público «Quiero ser hogar de paso» (entra
       inactivo hasta que un voluntario lo revise) y lista en el panel para
       contactarlos. Contacto solo para voluntarios.
-- [ ] **Adopciones** (idea, 18-ago-2026): un estado más de la ficha
-      («en adopción») que un voluntario pone cuando pasa ~1-1,5 meses sin
-      reencuentro; el vigía avisa las que llevan más de 45 días. Sección
-      pública apagada hasta decidir reglas (quién decide, qué pasa si aparece
-      el tutor, requisitos). Primero el estado interno + aviso.
+- [x] **Adopciones** (pedido del equipo, 19-ago-2026): tabla `adopciones`
+      propia (una fila por proceso: disponible / entregada / cancelada, con
+      contacto opcional). Cualquier voluntario marca «Dar en adopción» desde
+      la ficha; la ficha pública muestra «En adopción» y un botón «Preguntar
+      por esta mascota» (al contacto indicado o, si no, al de la ficha). El
+      animal sigue en resguardo y sigue cruzando con búsquedas por si aparece
+      el tutor. Pendiente: aviso del vigía a los ~45 días sin reencuentro;
+      separar voluntarios de administradores (quién puede marcar).
 - [ ] Refugios, detalle original del plan (19-ago-2026, hecho arriba). Hoy
       «Nombre del refugio o del sitio» es texto libre en cada ficha, así que
       no se puede filtrar bien ni evitar que el mismo refugio quede escrito

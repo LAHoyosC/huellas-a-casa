@@ -25,7 +25,7 @@ import { readFileSync } from "node:fs";
 
 export const CONSULTA_ESQUEMA = `
   select table_name || '.' || column_name from information_schema.columns
-   where table_schema = 'public' and table_name in ('mascotas','busquedas','voluntarios','historial','refugios')
+   where table_schema = 'public' and table_name in ('mascotas','busquedas','voluntarios','historial','refugios','adopciones')
   union all
   select 'funcion:' || p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
@@ -63,6 +63,10 @@ if (sel) for (const c of sel[1].split(",")) ficha.add(c.trim());
 // Refugios: lo que escribe el panel de voluntarios (CAMPOS_REFUGIO en App.jsx).
 const refugio = new Set(literal("CAMPOS_REFUGIO"));
 for (const c of ["id", "activo", "creado_en"]) refugio.add(c);
+// Adopciones: lo que escribe el voluntario (CAMPOS_ADOPCION en App.jsx) más
+// lo que el insert y el filtro agregan por su cuenta.
+const adopcion = new Set(literal("CAMPOS_ADOPCION"));
+for (const c of ["id", "mascota_id", "estado", "creado_por", "creado_en"]) adopcion.add(c);
 // Lo que la sesión lee del voluntario (src/lib/sesion.js).
 const voluntario = new Set(["id", "nombre", "refugio", "refugio_id", "activo"]);
 // Funciones RPC.
@@ -73,6 +77,7 @@ const esperado = [
   ...[...compartidos].flatMap((c) => [`mascotas.${c}`, `busquedas.${c}`]),
   ...[...busqueda].map((c) => `busquedas.${c}`),
   ...[...refugio].map((c) => `refugios.${c}`),
+  ...[...adopcion].map((c) => `adopciones.${c}`),
   ...[...voluntario].map((c) => `voluntarios.${c}`),
   ...[...funciones].map((f) => `funcion:${f}`),
 ];

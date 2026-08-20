@@ -110,6 +110,11 @@ const CAMPOS_REFUGIO = [
 ];
 const soloCamposRefugio = (obj) => Object.fromEntries(CAMPOS_REFUGIO.map((k) => [k, obj[k] ?? null]));
 
+// Campos de una adopción que el voluntario escribe al marcarla. El contacto
+// es opcional: si queda vacío, se pregunta al contacto que la ficha ya muestra.
+const CAMPOS_ADOPCION = ["contacto_nombre", "contacto_telefono", "contacto_medio", "notas"];
+const soloCamposAdopcion = (obj) => Object.fromEntries(CAMPOS_ADOPCION.map((k) => [k, obj[k] ?? null]));
+
 // Al elegir un refugio, la ficha se llena sola con lo que el refugio ya
 // tiene: donde esta, como llegar y a quien escribir. Lo que la persona ya
 // habia escrito en la ficha se respeta salvo el sitio mismo.
@@ -277,8 +282,9 @@ function Dato({ etiqueta, valor }) {
   );
 }
 
-function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar, onEditar }) {
+function Detalle({ r, voluntario, adopcion, onAdopcion, onQuitarAdopcion, onCerrar, onReencontrar, onAprobar, onOcultar, onEditar }) {
   const [copiado, setCopiado] = useState(false);
+  const [formAdopcion, setFormAdopcion] = useState(false);
   const reencontrado = r.estado === "reencontrado";
   const senas = r.senas || [];
   // Misma regla que en la tarjeta: foto borrosa al publico hasta que un
@@ -342,6 +348,7 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar,
                 {r.codigo}
                 {!r.verificado && <span style={{ marginLeft: 8, color: T.ambar }}>SIN VERIFICAR</span>}
                 {reencontrado && <span style={{ marginLeft: 8, color: T.verde }}>REENCONTRADO</span>}
+                {adopcion && !reencontrado && <span style={{ marginLeft: 8, color: T.violeta }}>EN ADOPCIÓN</span>}
               </div>
               <h2 style={{ margin: "4px 0 0", fontSize: 24, fontWeight: 740, letterSpacing: "-.02em" }}>
                 {r.especie} {r.tamano?.toLowerCase()}, {r.color?.toLowerCase()}
@@ -377,7 +384,23 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar,
             <p style={{ margin: "14px 0 0", fontSize: 15, fontStyle: "italic", lineHeight: 1.55 }}>“{r.nota}”</p>
           )}
 
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18, alignItems: "center" }}>
+          {adopcion && !reencontrado && (
+            <div style={{ marginTop: 16, padding: "11px 13px", background: T.violetaClaro, borderRadius: 9, fontSize: 13.5, lineHeight: 1.5, color: T.violeta }}>
+              <strong style={{ fontWeight: 660 }}>Busca un hogar.</strong> Nadie ha reclamado a este animal
+              y está disponible para adopción. Si quieres darle una familia, pregunta por él.
+              {adopcion.notas && <> {adopcion.notas}</>}
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: adopcion && !reencontrado ? 12 : 18, alignItems: "center" }}>
+            {adopcion && !reencontrado && (
+              <a href={enlaceContacto(adopcion.contacto_medio || r.contacto_medio, adopcion.contacto_telefono || r.contacto_telefono)}
+                target="_blank" rel="noreferrer" style={{
+                  background: T.violeta, color: T.blanco, textDecoration: "none", padding: "10px 15px", borderRadius: 8, fontSize: 14.5, fontWeight: 640,
+                }}>
+                Preguntar por esta mascota
+              </a>
+            )}
             {!reencontrado && (
               <a href={enlaceContacto(r.contacto_medio, r.contacto_telefono)} target="_blank" rel="noreferrer" style={{
                 background: T.verde, color: T.blanco, textDecoration: "none", padding: "10px 15px", borderRadius: 8, fontSize: 14.5, fontWeight: 640,
@@ -399,10 +422,48 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar,
               <button type="button" onClick={() => onEditar(r)} style={botonSecundario(T.tinta)}>Editar ficha</button>
               <button type="button" onClick={() => onReencontrar(r)} style={botonSecundario(T.tintaSuave)}>Marcar como reencontrado</button>
               <button type="button" onClick={() => { onOcultar(r); onCerrar(); }} style={botonSecundario(T.tintaSuave)}>Ocultar</button>
+              {adopcion
+                ? <button type="button" onClick={() => onQuitarAdopcion(r)} style={botonSecundario(T.tintaSuave)}>Quitar de adopción</button>
+                : <button type="button" onClick={() => setFormAdopcion(!formAdopcion)} style={botonSecundario(T.violeta)}>Dar en adopción…</button>}
             </div>
+          )}
+
+          {voluntario && !reencontrado && !adopcion && formAdopcion && (
+            <FormAdopcion onGuardar={async (datos) => { await onAdopcion(r, datos); setFormAdopcion(null); }}
+              onCancelar={() => setFormAdopcion(null)} />
           )}
         </div>
       </article>
+    </div>
+  );
+}
+
+// Mini-formulario para poner en adopción: se usa en la ficha abierta y en las
+// tarjetas (listado y panel). Contacto opcional: si queda vacío, el botón
+// público usa el contacto que la ficha ya muestra.
+function FormAdopcion({ onGuardar, onCancelar }) {
+  const [f, setF] = useState({ contacto_medio: "WhatsApp" });
+  return (
+    <div style={{ marginTop: 12, padding: "12px 13px", background: T.violetaClaro, borderRadius: 9, display: "flex", flexDirection: "column", gap: 9 }}>
+      <div style={{ fontSize: 13.5, color: T.violeta, lineHeight: 1.5 }}>
+        La ficha mostrará «En adopción» y un botón para preguntar por el animal. Si no llenas
+        el contacto, se usa el que ya tiene la ficha (quien lo aloja). El animal sigue
+        cruzando con las búsquedas por si aparece el tutor.
+      </div>
+      <CampoContacto medio={f.contacto_medio} valor={f.contacto_telefono}
+        onMedio={(m) => setF((p) => ({ ...p, contacto_medio: m }))}
+        onValor={(v) => setF((p) => ({ ...p, contacto_telefono: v }))} />
+      <input style={entradaTexto} value={f.contacto_nombre || ""} placeholder="A quién preguntar (opcional)"
+        onChange={(e) => setF((p) => ({ ...p, contacto_nombre: e.target.value }))} />
+      <input style={entradaTexto} value={f.notas || ""} placeholder="Nota para quien quiera adoptar (opcional)"
+        onChange={(e) => setF((p) => ({ ...p, notas: e.target.value }))} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <button type="button" onClick={() => onGuardar(f)}
+          style={{ background: T.violeta, color: T.blanco, border: "none", padding: "9px 14px", borderRadius: 8, fontSize: 13.5, fontWeight: 640, cursor: "pointer" }}>
+          Poner en adopción
+        </button>
+        <button type="button" onClick={onCancelar} style={botonSecundario(T.tintaSuave)}>Cancelar</button>
+      </div>
     </div>
   );
 }
@@ -457,9 +518,10 @@ function Sello({ valor }) {
   );
 }
 
-function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, onOcultar, onMostrar, onVer }) {
+function Ficha({ r, resultado, nombres, voluntario, adopcion, onAdopcion, onQuitarAdopcion, onReencontrar, onAprobar, onOcultar, onMostrar, onVer }) {
   const reencontrado = r.estado === "reencontrado";
   const oculta = r.estado === "oculto";
+  const [formAdopcion, setFormAdopcion] = useState(false);
   const senas = r.senas || [];
   // Control de imagenes: hasta que un voluntario apruebe la ficha, la foto
   // se muestra borrosa al publico (quien quiera la destapa tocandola). Asi
@@ -509,6 +571,9 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
                 )}
                 {!r.verificado && (
                   <span style={{ marginLeft: 8, color: T.ambar }}>SIN VERIFICAR</span>
+                )}
+                {adopcion && !reencontrado && !oculta && (
+                  <span style={{ marginLeft: 8, color: T.violeta }}>EN ADOPCIÓN</span>
                 )}
               </div>
               <h4 style={{ margin: "2px 0 0", fontSize: 17, fontWeight: 700, letterSpacing: "-.015em" }}>
@@ -645,11 +710,25 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
                     <button type="button" onClick={() => onOcultar(r)} style={botonSecundario(T.tintaSuave)}>
                       Ocultar
                     </button>
+                    {onQuitarAdopcion && adopcion && (
+                      <button type="button" onClick={() => onQuitarAdopcion(r)} style={botonSecundario(T.tintaSuave)}>
+                        Quitar de adopción
+                      </button>
+                    )}
+                    {onAdopcion && !adopcion && (
+                      <button type="button" onClick={() => setFormAdopcion(!formAdopcion)} style={botonSecundario(T.violeta)}>
+                        Dar en adopción…
+                      </button>
+                    )}
                   </>
                 )}
               </>
             )}
           </div>
+          {voluntario && !oculta && !reencontrado && !adopcion && formAdopcion && (
+            <FormAdopcion onGuardar={async (datos) => { await onAdopcion(r, datos); setFormAdopcion(false); }}
+              onCancelar={() => setFormAdopcion(false)} />
+          )}
         </div>
       </div>
     </article>
@@ -804,7 +883,7 @@ function Refugios({ refugios, registros, voluntario, onGuardar, onAsignar, accio
   );
 }
 
-function Panel({ registros, voluntario, acciones, refugios, onGuardarRefugio, onAsignarRefugio }) {
+function Panel({ registros, voluntario, acciones, refugios, adopcionDe, onGuardarRefugio, onAsignarRefugio }) {
   const [busquedas, setBusquedas] = useState(null);
   // Que tarjeta esta desplegada (su lista se muestra debajo de las tarjetas).
   const [abierta, setAbierta] = useState(null);
@@ -860,6 +939,7 @@ function Panel({ registros, voluntario, acciones, refugios, onGuardarRefugio, on
     { id: "sin_verificar", texto: "sin verificar", borde: T.ambar, fichas: registros.filter((r) => r.estado === "resguardo" && !r.verificado) },
     { id: "reencontrados", texto: "reencontrados", fichas: registros.filter((r) => r.estado === "reencontrado") },
     { id: "ocultas", texto: "ocultas", fichas: registros.filter((r) => r.estado === "oculto") },
+    { id: "en_adopcion", texto: "en adopción", borde: T.violeta, fichas: registros.filter((r) => r.estado === "resguardo" && adopcionDe(r.id)) },
     { id: "fichas_24h", texto: "fichas últimas 24 h", fichas: registros.filter((r) => new Date(r.creado_en) > desde(24)) },
     { id: "busq_abiertas", texto: "búsquedas abiertas", borde: T.verde, busquedas: B.filter((b) => !b.estado || b.estado === "abierta") },
     { id: "busq_24h", texto: "búsquedas últimas 24 h", busquedas: B.filter((b) => new Date(b.creado_en) > desde(24)) },
@@ -896,7 +976,7 @@ function Panel({ registros, voluntario, acciones, refugios, onGuardarRefugio, on
           </div>
           {activa.fichas && activa.fichas.length === 0 && <p style={{ margin: 0, color: T.tintaSuave, fontSize: 14 }}>Nada por aquí.</p>}
           {activa.fichas && activa.fichas.map((r) => (
-            <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} {...acciones} />
+            <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} adopcion={adopcionDe(r.id)} {...acciones} />
           ))}
           {activa.busquedas && activa.busquedas.length === 0 && <p style={{ margin: 0, color: T.tintaSuave, fontSize: 14 }}>Nada por aquí.</p>}
           {activa.busquedas && activa.busquedas.map((b) => (
@@ -1467,6 +1547,35 @@ export default function App() {
   const refugiosActivos = refugios.filter((x) => x.activo);
   const refugioDe = (id) => refugios.find((x) => x.id === id) || null;
 
+  // Adopciones: el público recibe solo las disponibles; los voluntarios,
+  // todas (RLS). Una mascota está «en adopción» si tiene una fila disponible.
+  const [adopciones, setAdopciones] = useState([]);
+  async function cargarAdopciones() {
+    const { data } = await supabase.from("adopciones").select("*");
+    setAdopciones(data || []);
+  }
+  useEffect(() => { cargarAdopciones(); }, [voluntario?.id]);
+  const adopcionDe = (mascotaId) => adopciones.find((a) => a.mascota_id === mascotaId && a.estado === "disponible") || null;
+
+  // Poner una mascota en adopción (solo voluntarios, RLS). La ficha no cambia
+  // de estado: sigue en resguardo y sigue cruzando con las búsquedas.
+  async function ponerEnAdopcion(r, datos) {
+    const fila = { ...soloCamposAdopcion(datos || {}), mascota_id: r.id, creado_por: voluntario?.id || null };
+    if (!fila.contacto_medio) fila.contacto_medio = "WhatsApp";
+    const { error } = await supabase.from("adopciones").insert([fila]);
+    if (error) { alert("No se pudo poner en adopción."); return; }
+    await cargarAdopciones();
+  }
+  // Quitarla (p. ej. apareció el tutor o ya se entregó): nada se borra, la
+  // fila queda cancelada y la historia se conserva.
+  async function quitarDeAdopcion(r) {
+    const a = adopcionDe(r.id);
+    if (!a) return;
+    const { error } = await supabase.from("adopciones").update({ estado: "cancelada" }).eq("id", a.id);
+    if (error) { alert("No se pudo quitar de adopción."); return; }
+    await cargarAdopciones();
+  }
+
   // Guardar (crear o editar) un refugio desde el panel. Solo voluntarios (RLS).
   async function guardarRefugio(datos, id) {
     const fila = soloCamposRefugio(datos);
@@ -2010,7 +2119,7 @@ export default function App() {
                 <div style={{ display: "grid", gap: 14 }}>
                   {resultados.map(({ ficha, resultado }) => (
                     <Ficha key={ficha.id} r={ficha} resultado={resultado}
-                      nombres={busqueda.nombres} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
+                      nombres={busqueda.nombres} voluntario={voluntario} adopcion={adopcionDe(r.id)} onAdopcion={ponerEnAdopcion} onQuitarAdopcion={quitarDeAdopcion} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
                   ))}
                 </div>
               </>
@@ -2184,7 +2293,7 @@ export default function App() {
                 </p>
                 <div style={{ display: "grid", gap: 12 }}>
                   {duplicados.map(({ ficha, resultado }) => (
-                    <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
+                    <Ficha key={ficha.id} r={ficha} resultado={resultado} nombres={null} voluntario={voluntario} adopcion={adopcionDe(ficha.id)} onAdopcion={ponerEnAdopcion} onQuitarAdopcion={quitarDeAdopcion} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
                   ))}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
@@ -2227,14 +2336,14 @@ export default function App() {
 
         {modo === "caso" && (
           <EstadoCaso codigoInicial={casoInicial} registros={registros} voluntario={voluntario}
-            acciones={{ onReencontrar: marcarReencontrado, onAprobar: aprobar, onOcultar: ocultar, onMostrar: mostrarDeNuevo, onVer: verFicha }}
+            acciones={{ onAdopcion: ponerEnAdopcion, onQuitarAdopcion: quitarDeAdopcion, onReencontrar: marcarReencontrado, onAprobar: aprobar, onOcultar: ocultar, onMostrar: mostrarDeNuevo, onVer: verFicha }}
             onBuscarDeNuevo={() => { setResultados(null); setModo("buscar"); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
         )}
 
         {modo === "panel" && voluntario && (
-          <Panel registros={registros} voluntario={voluntario} refugios={refugios}
+          <Panel registros={registros} voluntario={voluntario} refugios={refugios} adopcionDe={adopcionDe}
             onGuardarRefugio={guardarRefugio} onAsignarRefugio={asignarRefugio}
-            acciones={{ onReencontrar: marcarReencontrado, onAprobar: aprobar, onOcultar: ocultar, onMostrar: mostrarDeNuevo, onVer: verFicha }} />
+            acciones={{ onAdopcion: ponerEnAdopcion, onQuitarAdopcion: quitarDeAdopcion, onReencontrar: marcarReencontrado, onAprobar: aprobar, onOcultar: ocultar, onMostrar: mostrarDeNuevo, onVer: verFicha }} />
         )}
 
         {modo === "lista" && (
@@ -2273,7 +2382,7 @@ export default function App() {
             <div style={{ display: "grid", gap: 14 }}>
               {cargando && <p style={{ color: T.tintaSuave, fontSize: 15 }}>Cargando fichas…</p>}
               {!cargando && listaFiltrada.map((r) => (
-                <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
+                <Ficha key={r.id} r={r} resultado={null} nombres={null} voluntario={voluntario} adopcion={adopcionDe(r.id)} onAdopcion={ponerEnAdopcion} onQuitarAdopcion={quitarDeAdopcion} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
               ))}
               {!cargando && listaFiltrada.length === 0 && (
                 <div style={{
@@ -2300,7 +2409,8 @@ export default function App() {
         </div>
       </footer>
       {detalle && (
-        <Detalle r={detalle} voluntario={voluntario} onCerrar={cerrarFicha}
+        <Detalle r={detalle} voluntario={voluntario} adopcion={adopcionDe(detalle.id)} onCerrar={cerrarFicha}
+          onAdopcion={ponerEnAdopcion} onQuitarAdopcion={quitarDeAdopcion}
           onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onEditar={editarFicha} />
       )}
     </div>
