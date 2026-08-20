@@ -1625,6 +1625,7 @@ export default function App() {
   const [filtroEspecie, setFiltroEspecie] = useState("");
   const [filtroMuni, setFiltroMuni] = useState("");
   const [filtroRefugio, setFiltroRefugio] = useState("");
+  const [filtroAdopcion, setFiltroAdopcion] = useState(false);
   // Refugios: el publico recibe los activos; los voluntarios, todos (RLS).
   const [refugios, setRefugios] = useState([]);
   async function cargarRefugios() {
@@ -1940,8 +1941,9 @@ export default function App() {
       (verOcultas ? r.estado === "oculto" : r.estado !== "oculto") &&
       (!filtroEspecie || r.especie === filtroEspecie) &&
       (!filtroMuni || r.municipio === filtroMuni) &&
-      (!filtroRefugio || r.refugio_id === filtroRefugio)),
-    [registros, filtroEspecie, filtroMuni, filtroRefugio, verOcultas]
+      (!filtroRefugio || r.refugio_id === filtroRefugio) &&
+      (!filtroAdopcion || adopcionDe(r.id))),
+    [registros, adopciones, filtroEspecie, filtroMuni, filtroRefugio, filtroAdopcion, verOcultas]
   );
 
   const municipiosConRegistro = useMemo(
@@ -2450,8 +2452,14 @@ export default function App() {
           <section>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18, alignItems: "center" }}>
               <span style={{ fontFamily: MONO, fontSize: 11.5, color: T.tintaSuave, marginRight: 4 }}>FILTRAR</span>
-              <Opcion activo={!filtroEspecie} onClick={() => setFiltroEspecie("")}>Todas</Opcion>
-              {ESPECIE.map((o) => <Opcion key={o} activo={filtroEspecie === o} onClick={() => setFiltroEspecie(o)}>{o}</Opcion>)}
+              <select value={filtroEspecie} onChange={(e) => setFiltroEspecie(e.target.value)}
+                style={{ ...entradaTexto, maxWidth: 190, padding: "10px 12px", minHeight: 44 }}>
+                <option value="">Todos los animales</option>
+                {ESPECIE.map((o) => <option key={o} value={o}>{o}</option>)}
+              </select>
+              <Opcion activo={filtroAdopcion} onClick={() => setFiltroAdopcion((v) => !v)}>
+                En adopción
+              </Opcion>
               <select value={filtroMuni} onChange={(e) => setFiltroMuni(e.target.value)}
                 style={{ ...entradaTexto, maxWidth: 210, padding: "10px 12px", minHeight: 44 }}>
                 <option value="">Todos los municipios</option>
