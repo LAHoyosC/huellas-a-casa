@@ -468,6 +468,94 @@ function FormAdopcion({ onGuardar, onCancelar }) {
   );
 }
 
+// ------------------------- MIS CAMBIOS (voluntarios) -------------------------
+// La tabla `historial` guarda cada cambio con el antes y el después. Aquí el
+// voluntario ve sus últimos movimientos y puede deshacer una edición: se
+// restauran los valores de ANTES, solo en los campos que se pueden escribir
+// (nunca id, código ni fechas). Las creaciones no se deshacen: aquí nada se
+// borra (una ficha se oculta, una adopción se quita).
+
+const CAMPOS_DESHACER = {
+  mascotas: [...CAMPOS_FICHA, "estado", "verificado"],
+  refugios: CAMPOS_REFUGIO,
+  adopciones: [...CAMPOS_ADOPCION, "estado"],
+};
+const TABLA_NOMBRE = { mascotas: "ficha", refugios: "refugio", adopciones: "adopción", busquedas: "búsqueda" };
+
+// Los campos que de verdad cambiaron y se pueden restaurar.
+function cambiosDeshacibles(h) {
+  const permitidos = CAMPOS_DESHACER[h.tabla];
+  if (!permitidos || h.operacion !== "UPDATE" || !h.antes || !h.despues) return null;
+  const c = {};
+  for (const k of permitidos) {
+    if (JSON.stringify(h.antes[k] ?? null) !== JSON.stringify(h.despues[k] ?? null)) c[k] = h.antes[k] ?? null;
+  }
+  return Object.keys(c).length ? c : null;
+}
+
+function MisCambios({ voluntario, onDeshacer, onCerrar }) {
+  const [cambios, setCambios] = useState(null);
+  const [deshechos, setDeshechos] = useState([]);
+  useEffect(() => {
+    supabase.from("historial").select("*")
+      .eq("hecho_por", voluntario.id)
+      .order("hecho_en", { ascending: false }).limit(50)
+      .then(({ data }) => setCambios(data || []));
+  }, [voluntario.id]);
+
+  const cuando = (t) => new Date(t).toLocaleString("es-CO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  const nombreDe = (h) => (h.despues || h.antes || {}).codigo || (h.despues || h.antes || {}).nombre || "";
+
+  return (
+    <div onClick={onCerrar} style={{
+      position: "fixed", inset: 0, background: "rgba(27,32,41,.55)", zIndex: 60,
+      display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px 12px", overflowY: "auto",
+    }}>
+      <article onClick={(e) => e.stopPropagation()} style={{
+        background: T.blanco, borderRadius: 14, maxWidth: 620, width: "100%",
+        boxShadow: "0 20px 60px rgba(0,0,0,.25)", padding: "18px 20px 20px",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <h3 style={{ margin: 0, fontSize: 19, fontWeight: 720 }}>Mis últimos cambios</h3>
+          <button type="button" onClick={onCerrar} aria-label="Cerrar" style={{
+            width: 34, height: 34, borderRadius: "50%", border: "none", background: T.papelHondo, fontSize: 17, cursor: "pointer", fontWeight: 700,
+          }}>×</button>
+        </div>
+        <p style={{ margin: "0 0 14px", fontSize: 13.5, color: T.tintaSuave, lineHeight: 1.5 }}>
+          «Deshacer» vuelve una edición a como estaba justo antes de ese cambio. Las creaciones no se
+          deshacen (aquí nada se borra: una ficha se oculta, una adopción se quita desde su ficha).
+        </p>
+        {!cambios && <p style={{ margin: 0, color: T.tintaSuave, fontSize: 14 }}>Cargando…</p>}
+        {cambios && cambios.length === 0 && <p style={{ margin: 0, color: T.tintaSuave, fontSize: 14 }}>Todavía no has hecho cambios.</p>}
+        <div style={{ display: "grid", gap: 8 }}>
+          {(cambios || []).map((h) => {
+            const c = cambiosDeshacibles(h);
+            const hecho = deshechos.includes(h.id);
+            return (
+              <div key={h.id} style={{ border: `1px solid ${T.linea}`, borderRadius: 9, padding: "9px 12px", display: "flex", gap: 10, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                <div style={{ fontSize: 13.5, lineHeight: 1.45 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 11.5, color: T.tintaSuave }}>{cuando(h.hecho_en)}</span>
+                  {" — "}
+                  {h.operacion === "INSERT" ? "creaste" : "editaste"} {TABLA_NOMBRE[h.tabla] || h.tabla}
+                  {nombreDe(h) && <strong style={{ fontWeight: 640 }}> {nombreDe(h)}</strong>}
+                  {c && <span style={{ display: "block", fontSize: 12.5, color: T.tintaSuave }}>Cambió: {Object.keys(c).join(", ")}</span>}
+                </div>
+                {c && !hecho && (
+                  <button type="button" style={botonSecundario(T.tinta)}
+                    onClick={async () => { if (await onDeshacer(h, c)) setDeshechos((p) => [...p, h.id]); }}>
+                    Deshacer
+                  </button>
+                )}
+                {hecho && <span style={{ fontSize: 12.5, color: T.verde, fontWeight: 620 }}>Deshecho ✓</span>}
+              </div>
+            );
+          })}
+        </div>
+      </article>
+    </div>
+  );
+}
+
 /* ------------------------------ PIEZAS ----------------------------- */
 
 function Opcion({ activo, onClick, children, muestra }) {
@@ -1576,6 +1664,18 @@ export default function App() {
     await cargarAdopciones();
   }
 
+  // «Mis cambios»: deshacer una edición restaurando los valores de antes
+  // (solo campos escribibles; el RLS ya limita esto a voluntarios activos).
+  const [verMisCambios, setVerMisCambios] = useState(false);
+  async function deshacerCambio(h, cambios) {
+    const { error } = await supabase.from(h.tabla).update(cambios).eq("id", h.registro_id);
+    if (error) { alert("No se pudo deshacer ese cambio."); return false; }
+    if (h.tabla === "mascotas") await cargar();
+    else if (h.tabla === "refugios") await cargarRefugios();
+    else if (h.tabla === "adopciones") await cargarAdopciones();
+    return true;
+  }
+
   // Guardar (crear o editar) un refugio desde el panel. Solo voluntarios (RLS).
   async function guardarRefugio(datos, id) {
     const fila = soloCamposRefugio(datos);
@@ -2412,6 +2512,17 @@ export default function App() {
         <Detalle r={detalle} voluntario={voluntario} adopcion={adopcionDe(detalle.id)} onCerrar={cerrarFicha}
           onAdopcion={ponerEnAdopcion} onQuitarAdopcion={quitarDeAdopcion}
           onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onEditar={editarFicha} />
+      )}
+      {voluntario && (
+        <button type="button" onClick={() => setVerMisCambios(true)} title="Mis últimos cambios" style={{
+          position: "fixed", right: 16, bottom: 16, zIndex: 40,
+          background: T.blanco, border: `1.5px solid ${T.linea}`, borderRadius: 24,
+          padding: "10px 15px", fontSize: 13.5, fontWeight: 620, color: T.tinta, cursor: "pointer",
+          boxShadow: "0 4px 14px rgba(0,0,0,.12)", fontFamily: FUENTE,
+        }}>⟲ Mis cambios</button>
+      )}
+      {voluntario && verMisCambios && (
+        <MisCambios voluntario={voluntario} onDeshacer={deshacerCambio} onCerrar={() => setVerMisCambios(false)} />
       )}
     </div>
   );
