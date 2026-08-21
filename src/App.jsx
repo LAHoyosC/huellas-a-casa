@@ -2221,7 +2221,7 @@ export default function App() {
                 <div style={{ display: "grid", gap: 14 }}>
                   {resultados.map(({ ficha, resultado }) => (
                     <Ficha key={ficha.id} r={ficha} resultado={resultado}
-                      nombres={busqueda.nombres} voluntario={voluntario} adopcion={adopcionDe(r.id)} onAdopcion={ponerEnAdopcion} onQuitarAdopcion={quitarDeAdopcion} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
+                      nombres={busqueda.nombres} voluntario={voluntario} adopcion={adopcionDe(ficha.id)} onAdopcion={ponerEnAdopcion} onQuitarAdopcion={quitarDeAdopcion} onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onVer={verFicha} />
                   ))}
                 </div>
               </>
