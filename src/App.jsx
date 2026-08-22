@@ -981,9 +981,31 @@ function Panel({ registros, voluntario, acciones, refugios, adopcionDe, onGuarda
       .then(({ data }) => setBusquedas(data || []));
   }, []);
   async function cambiarEstadoBusqueda(b, estado) {
-    const { error } = await supabase.from("busquedas").update({ estado }).eq("id", b.id);
+    // El estado se cambia para todo el caso: la principal y sus duplicadas.
+    const ids = [b.id, ...(busquedas || []).filter((x) => x.duplicada_de === b.id).map((x) => x.id)];
+    const { error } = await supabase.from("busquedas").update({ estado }).in("id", ids);
     if (error) { alert("No se pudo cambiar el estado de la búsqueda."); return; }
-    setBusquedas((p) => p.map((x) => (x.id === b.id ? { ...x, estado } : x)));
+    setBusquedas((p) => p.map((x) => (ids.includes(x.id) ? { ...x, estado } : x)));
+  }
+
+  // Unir dos búsquedas como el mismo caso: la duplicada apunta a la principal.
+  // Nada se borra; se puede separar después. Si la «principal» elegida ya era
+  // duplicada, se cuelga de su principal real para no hacer cadenas.
+  async function unirBusquedas(dup, principal) {
+    const lista = busquedas || [];
+    const raiz = (principal.duplicada_de && lista.find((x) => x.id === principal.duplicada_de)) || principal;
+    if (raiz.id === dup.id) return;
+    // Lo que ya colgaba de la duplicada pasa también a la nueva principal.
+    const ids = [dup.id, ...lista.filter((x) => x.duplicada_de === dup.id).map((x) => x.id)];
+    const { error } = await supabase.from("busquedas").update({ duplicada_de: raiz.id }).in("id", ids);
+    if (error) { alert("No se pudo unir las búsquedas."); return; }
+    setBusquedas((p) => p.map((x) => (ids.includes(x.id) ? { ...x, duplicada_de: raiz.id } : x)));
+  }
+
+  async function separarBusqueda(b) {
+    const { error } = await supabase.from("busquedas").update({ duplicada_de: null }).eq("id", b.id);
+    if (error) { alert("No se pudo separar la búsqueda."); return; }
+    setBusquedas((p) => p.map((x) => (x.id === b.id ? { ...x, duplicada_de: null } : x)));
   }
 
   const hoy = new Date();
@@ -1021,7 +1043,10 @@ function Panel({ registros, voluntario, acciones, refugios, adopcionDe, onGuarda
   const tarjeta = { border: `1px solid ${T.linea}`, borderRadius: 11, background: T.blanco, padding: "12px 14px", fontSize: 13, color: T.tintaSuave };
 
   // Cada tarjeta: que cuenta y que lista despliega al tocarla.
-  const B = busquedas || [];
+  // Las duplicadas no aparecen como tarjetas propias: viven dentro de su
+  // principal, que muestra el caso completo.
+  const B = (busquedas || []).filter((x) => !x.duplicada_de);
+  const duplicadasDe = (id) => (busquedas || []).filter((x) => x.duplicada_de === id);
   const TARJETAS = [
     { id: "resguardo", texto: "en resguardo", fichas: registros.filter((r) => r.estado === "resguardo") },
     { id: "sin_verificar", texto: "sin verificar", borde: T.ambar, fichas: registros.filter((r) => r.estado === "resguardo" && !r.verificado) },
@@ -1068,7 +1093,8 @@ function Panel({ registros, voluntario, acciones, refugios, adopcionDe, onGuarda
           ))}
           {activa.busquedas && activa.busquedas.length === 0 && <p style={{ margin: 0, color: T.tintaSuave, fontSize: 14 }}>Nada por aquí.</p>}
           {activa.busquedas && activa.busquedas.map((b) => (
-            <Busqueda key={b.id} b={b} enResguardo={enResguardo} voluntario={voluntario} acciones={acciones} onEstado={cambiarEstadoBusqueda} />
+            <Busqueda key={b.id} b={b} enResguardo={enResguardo} voluntario={voluntario} acciones={acciones} onEstado={cambiarEstadoBusqueda}
+              todas={B} duplicadas={duplicadasDe(b.id)} onUnir={unirBusquedas} onSeparar={separarBusqueda} />
           ))}
         </div>
       )}
@@ -1210,10 +1236,41 @@ function EstadoCaso({ codigoInicial, registros, voluntario, acciones, onBuscarDe
   );
 }
 
-function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
+function Busqueda({ b, enResguardo, voluntario, acciones, onEstado, todas = [], duplicadas = [], onUnir, onSeparar }) {
   const [verParecidas, setVerParecidas] = useState(false);
   const abierta = !b.estado || b.estado === "abierta";
-  const parecidas = useMemo(() => buscarCoincidencias(b, enResguardo).filter((x) => x.resultado.valor >= 55), [b, enResguardo]);
+  // Las coincidencias del caso completo: cada búsqueda del grupo cruza por su
+  // lado (cada intento del tutor marcó rasgos distintos) y por ficha se
+  // conserva el mejor puntaje. Así ninguna combinación que probó se pierde.
+  const parecidas = useMemo(() => {
+    const mejores = new Map();
+    for (const g of [b, ...duplicadas]) {
+      for (const x of buscarCoincidencias(g, enResguardo)) {
+        if (x.resultado.valor >= 55 && (!mejores.has(x.ficha.id) || mejores.get(x.ficha.id).resultado.valor < x.resultado.valor)) mejores.set(x.ficha.id, x);
+      }
+    }
+    return [...mejores.values()].sort((p, q) => q.resultado.valor - p.resultado.valor);
+  }, [b, duplicadas, enResguardo]);
+  // Mismo teléfono en otra búsqueda abierta: casi seguro es el mismo tutor
+  // probando otra combinación. La máquina solo sugiere; une el voluntario.
+  const soloDigitos = (x) => String(x.contacto_telefono || "").replace(/\D/g, "").slice(-10);
+  const sugerida = useMemo(() => {
+    if (!onUnir || !abierta || !soloDigitos(b)) return null;
+    return todas.find((x) => x.id !== b.id && (!x.estado || x.estado === "abierta") && soloDigitos(x) === soloDigitos(b)) || null;
+  }, [todas, b, duplicadas]);
+  // La más vieja del par queda de principal: su código es el que el tutor
+  // probablemente guardó primero.
+  const unir = (otra) => {
+    const [principal, dup] = new Date(otra.creado_en) <= new Date(b.creado_en) ? [otra, b] : [b, otra];
+    onUnir(dup, principal);
+  };
+  const unirPorCodigo = () => {
+    const codigo = window.prompt("Código de la otra búsqueda del mismo caso (BUS-…):");
+    if (!codigo) return;
+    const otra = todas.find((x) => x.id !== b.id && (x.codigo || "").toUpperCase() === codigo.trim().toUpperCase());
+    if (!otra) { alert("No encontré una búsqueda con ese código (revisa que no sea ya duplicada de otra)."); return; }
+    unir(otra);
+  };
   const rasgos = [b.especie, b.raza && !RAZA_INDEFINIDA.includes(b.raza) ? b.raza : null, b.tamano, b.color, b.pelo ? `pelo ${b.pelo.toLowerCase()}` : null,
     b.sexo && b.sexo !== "No sé" ? b.sexo : null, b.edad, b.orejas ? `orejas ${b.orejas.toLowerCase()}` : null, b.cola ? `cola ${b.cola.toLowerCase()}` : null,
     b.collar_color ? `collar ${b.collar_color.toLowerCase()}` : null].filter(Boolean).join(" · ");
@@ -1239,6 +1296,30 @@ function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
         {(b.senas || []).length ? ` · ${b.senas.join(", ")}` : ""}{b.senas_donde ? ` (${b.senas_donde})` : ""}
       </div>
       {b.nota && <p style={{ margin: "8px 0 0", fontSize: 13.5, fontStyle: "italic" }}>“{b.nota}”</p>}
+      {duplicadas.length > 0 && (
+        <div style={{ marginTop: 10, border: `1px solid ${T.linea}`, borderRadius: 9, padding: "8px 11px", fontSize: 13, background: T.papelHondo }}>
+          <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: ".1em", color: T.tintaSuave }}>MISMO CASO · {duplicadas.length + 1} BÚSQUEDAS</span>
+          {duplicadas.map((d) => (
+            <div key={d.id} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "baseline", marginTop: 5 }}>
+              <span style={{ fontFamily: MONO, fontSize: 11.5 }}>{d.codigo || "sin código"}</span>
+              <span style={{ color: T.tintaSuave }}>
+                {new Date(d.creado_en).toLocaleString("es-CO", { day: "2-digit", month: "short" })}
+                {[d.tamano, d.color, d.raza && !RAZA_INDEFINIDA.includes(d.raza) ? d.raza : null].filter(Boolean).length
+                  ? ` · ${[d.tamano, d.color, d.raza && !RAZA_INDEFINIDA.includes(d.raza) ? d.raza : null].filter(Boolean).join(" · ")}` : ""}
+              </span>
+              {onSeparar && <button type="button" onClick={() => onSeparar(d)} style={{ ...botonSecundario(T.tintaSuave), padding: "3px 8px", fontSize: 12 }}>Separar</button>}
+            </div>
+          ))}
+        </div>
+      )}
+      {sugerida && (
+        <div style={{ marginTop: 10, border: `1.5px solid ${T.ambar}`, background: T.ambarClaro, borderRadius: 9, padding: "9px 12px", fontSize: 13.5, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <span style={{ flex: 1, minWidth: 180 }}>
+            <strong style={{ fontWeight: 660 }}>{sugerida.codigo || "Otra búsqueda"}</strong> tiene el mismo teléfono: parece el mismo caso.
+          </span>
+          <button type="button" onClick={() => unir(sugerida)} style={botonSecundario(T.verde)}>Unir como el mismo caso</button>
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10, alignItems: "center" }}>
         {b.contacto_telefono ? (
           <a href={enlaceContacto(b.contacto_medio, b.contacto_telefono)} target="_blank" rel="noreferrer" style={{
@@ -1259,6 +1340,9 @@ function Busqueda({ b, enResguardo, voluntario, acciones, onEstado }) {
         )}
         {onEstado && !abierta && (
           <button type="button" onClick={() => onEstado(b, "abierta")} style={botonSecundario(T.tintaSuave)}>Reabrir</button>
+        )}
+        {onUnir && abierta && (
+          <button type="button" onClick={unirPorCodigo} style={botonSecundario(T.tintaSuave)}>Unir con otra búsqueda…</button>
         )}
       </div>
       {verParecidas && parecidas.length > 0 && (
