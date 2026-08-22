@@ -1122,6 +1122,9 @@ function Panel({ registros, voluntario, acciones, refugios, adopcionDe, onGuarda
 function EstadoCaso({ codigoInicial, registros, voluntario, acciones, onBuscarDeNuevo }) {
   const [codigo, setCodigo] = useState(codigoInicial || "");
   const [caso, setCaso] = useState(null);      // undefined = no existe
+  // Las demás búsquedas del mismo caso (si el tutor o un voluntario las unió):
+  // sus rasgos también cruzan, así ninguna combinación que probó se pierde.
+  const [grupo, setGrupo] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [cerrando, setCerrando] = useState(false);
 
@@ -1129,23 +1132,41 @@ function EstadoCaso({ codigoInicial, registros, voluntario, acciones, onBuscarDe
     const limpio = (c || "").trim().toUpperCase().replace(/^BUS[\s-]*/, "BUS-");
     if (!limpio) return;
     setCargando(true);
-    const { data } = await supabase.rpc("consultar_busqueda", { p_codigo: limpio });
-    setCaso(data && data[0] ? data[0] : undefined);
+    let { data } = await supabase.rpc("consultar_caso", { p_codigo: limpio });
+    // Respaldo por si la función nueva aún no está aplicada en la base.
+    if (!data) ({ data } = await supabase.rpc("consultar_busqueda", { p_codigo: limpio }));
+    const filas = data || [];
+    // Se muestra la búsqueda que el tutor consultó; las otras del caso acompañan.
+    const mia = filas.find((x) => x.codigo === limpio) || filas[0];
+    setCaso(mia || undefined);
+    setGrupo(mia ? filas : []);
     setCargando(false);
-    if (data && data[0]) history.replaceState(null, "", `/#${data[0].codigo}`);
+    if (mia) history.replaceState(null, "", `/#${mia.codigo}`);
   }
   useEffect(() => { if (codigoInicial) consultar(codigoInicial); }, [codigoInicial]);
 
   async function cerrar() {
     if (!confirm("¿Confirmas que tu mascota ya apareció? La búsqueda se marca como resuelta.")) return;
     setCerrando(true);
+    // La base cierra el caso completo (todas las búsquedas unidas).
     await supabase.rpc("cerrar_busqueda", { p_codigo: caso.codigo });
     setCaso((c) => ({ ...c, estado: "resuelta" }));
+    setGrupo((g) => g.map((x) => ({ ...x, estado: "resuelta" })));
     setCerrando(false);
   }
 
   const enResguardo = registros.filter((r) => r.estado === "resguardo");
-  const parecidas = useMemo(() => (caso ? buscarCoincidencias(caso, enResguardo) : []), [caso, enResguardo]);
+  // Cruzan todas las búsquedas del caso y por ficha queda el mejor puntaje.
+  const parecidas = useMemo(() => {
+    if (!caso) return [];
+    const mejores = new Map();
+    for (const g of (grupo.length ? grupo : [caso])) {
+      for (const x of buscarCoincidencias(g, enResguardo)) {
+        if (!mejores.has(x.ficha.id) || mejores.get(x.ficha.id).resultado.valor < x.resultado.valor) mejores.set(x.ficha.id, x);
+      }
+    }
+    return [...mejores.values()].sort((p, q) => q.resultado.valor - p.resultado.valor);
+  }, [caso, grupo, enResguardo]);
   const fecha = caso && new Date(caso.creado_en).toLocaleString("es-CO", { day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit" });
   const rasgos = caso && [caso.especie, caso.raza && !RAZA_INDEFINIDA.includes(caso.raza) ? caso.raza : null, caso.tamano, caso.color,
     caso.pelo ? `pelo ${caso.pelo.toLowerCase()}` : null, caso.sexo && caso.sexo !== "No sé" ? caso.sexo : null, caso.edad,
@@ -1200,6 +1221,13 @@ function EstadoCaso({ codigoInicial, registros, voluntario, acciones, onBuscarDe
               {(caso.senas || []).length ? ` · ${caso.senas.join(", ")}` : ""}{caso.senas_donde ? ` (${caso.senas_donde})` : ""}
             </div>
             {caso.nota && <p style={{ margin: "8px 0 0", fontSize: 13.5, fontStyle: "italic" }}>“{caso.nota}”</p>}
+            {grupo.length > 1 && (
+              <p style={{ margin: "8px 0 0", fontSize: 13.5, color: T.tintaSuave }}>
+                Este caso reúne {grupo.length} búsquedas tuyas unidas
+                (<span style={{ fontFamily: MONO }}>{grupo.map((g) => g.codigo).join(" · ")}</span>):
+                las fichas parecidas de abajo salen de todas juntas.
+              </p>
+            )}
             <p style={{ margin: "10px 0 0", fontSize: 14, lineHeight: 1.55 }}>
               {caso.tiene_contacto
                 ? <>Dejaste contacto por {caso.contacto_medio || "WhatsApp"}: si un voluntario ve algo parecido, te escribe por ahí. </>
@@ -1885,11 +1913,19 @@ export default function App() {
   // Foto opcional que deja el tutor al buscar (para que los voluntarios cotejen).
   const [fotoBusqueda, setFotoBusqueda] = useState(null);
   const [guardandoBusqueda, setGuardandoBusqueda] = useState(false);
+  // Si con el mismo teléfono hay otra búsqueda abierta reciente, se le
+  // sugiere al tutor unirlas como un solo caso. Él decide; la base solo
+  // devuelve código/fecha/nombre (nunca el contacto) y solo para el uuid de
+  // la búsqueda que él mismo acaba de crear.
+  const [idBusqueda, setIdBusqueda] = useState(null);
+  const [casoSugerido, setCasoSugerido] = useState(null);
+  const [casoUnido, setCasoUnido] = useState(null);
 
   async function buscar() {
     const activas = registros.filter((r) => r.estado === "resguardo");
     setResultados(buscarCoincidencias(busqueda, activas));
     setRegistroBusqueda(null);
+    setCasoSugerido(null); setCasoUnido(null); setIdBusqueda(null);
     if (!busqueda.especie) return;
     setGuardandoBusqueda(true);
     try {
@@ -1905,12 +1941,23 @@ export default function App() {
       for (let intento = 0; intento < 3; intento++) {
         const codigo = nuevoCodigoBusqueda();
         const { error } = await supabase.from("busquedas").insert([{ id, ...busqueda, ...urls, codigo, estado: "abierta" }]);
-        if (!error) { setRegistroBusqueda(codigo); setFotoBusqueda(null); return; }
+        if (!error) {
+          setRegistroBusqueda(codigo); setFotoBusqueda(null); setIdBusqueda(id);
+          const { data: parecida } = await supabase.rpc("caso_con_mismo_telefono", { p_id: id });
+          if (parecida && parecida[0]) setCasoSugerido(parecida[0]);
+          return;
+        }
         if (!/codigo|unique|duplicate/i.test(error.message || "")) return; // otro error: no insistir
       }
     } finally {
       setGuardandoBusqueda(false);
     }
+  }
+
+  async function unirMiBusqueda() {
+    const { data, error } = await supabase.rpc("unir_mi_busqueda", { p_id: idBusqueda });
+    if (error || !data) { alert("No se pudo unir con la otra búsqueda. Inténtalo de nuevo."); return; }
+    setCasoUnido(data);
   }
 
   async function guardarReporte(ignorarDuplicados = false) {
@@ -2264,6 +2311,36 @@ export default function App() {
                 <a href={`/#${registroBusqueda}`} onClick={(e) => { e.preventDefault(); setCasoInicial(registroBusqueda); setModo("caso"); }} style={{ color: T.verde, fontWeight: 620 }}>
                   consulta tu búsqueda aquí
                 </a>{" "}(guarda ese enlace).
+              </div>
+            )}
+            {registroBusqueda && casoSugerido && !casoUnido && (
+              <div style={{
+                border: `1.5px solid ${T.ambar}`, background: T.ambarClaro, borderRadius: 12,
+                padding: "14px 16px", marginBottom: 16, fontSize: 14.5, lineHeight: 1.55,
+              }}>
+                <strong style={{ fontWeight: 660 }}>¿Estás buscando a la misma mascota?</strong>{" "}
+                Con tu mismo teléfono hay otra búsqueda abierta de hoy
+                (<span style={{ fontFamily: MONO }}>{casoSugerido.codigo}</span>{casoSugerido.nombres ? `, de ${casoSugerido.nombres}` : ""}).
+                Si es la misma, únelas: cuentan como una sola descripción con todo lo que has respondido,
+                y con cualquiera de tus números ves los resultados de ambas.
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                  <button type="button" onClick={unirMiBusqueda} style={{
+                    background: T.verde, color: T.blanco, border: "none", borderRadius: 9,
+                    padding: "10px 15px", fontSize: 14.5, fontWeight: 660, cursor: "pointer",
+                  }}>Sí, es la misma — unir</button>
+                  <button type="button" onClick={() => setCasoSugerido(null)} style={botonSecundario(T.tintaSuave)}>
+                    No, es otra mascota
+                  </button>
+                </div>
+              </div>
+            )}
+            {casoUnido && (
+              <div style={{
+                border: `1.5px solid ${T.verde}`, background: T.verdeClaro, borderRadius: 12,
+                padding: "12px 16px", marginBottom: 16, fontSize: 14.5, lineHeight: 1.55,
+              }}>
+                Listo: quedó unida con <span style={{ fontFamily: MONO }}>{casoUnido}</span>. Los voluntarios
+                las ven como un solo caso y tú puedes consultar con cualquiera de los dos números.
               </div>
             )}
             {resultados.length === 0 ? (

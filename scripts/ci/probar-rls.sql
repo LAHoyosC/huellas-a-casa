@@ -267,4 +267,43 @@ begin
 end $$;
 reset role;
 
+-- ============================================================
+-- Caso del tutor (si las funciones existen): unir búsquedas propias sin
+-- exponer teléfonos. La sugerencia solo responde al uuid de la búsqueda
+-- propia y nunca devuelve el contacto.
+-- ============================================================
+do $$
+declare j jsonb; n bigint; id1 uuid := gen_random_uuid(); id2 uuid := gen_random_uuid(); v_cod text;
+begin
+  if to_regprocedure('public.unir_mi_busqueda(uuid)') is null then return; end if;
+
+  set local role anon;
+  -- El mismo tutor deja dos búsquedas con el mismo teléfono (escrito distinto).
+  insert into busquedas (id, especie, codigo, contacto_telefono) values (id1, 'Perro', 'BUS-CASOA', '+57 300 111 2233');
+  insert into busquedas (id, especie, codigo, contacto_telefono) values (id2, 'Perro', 'BUS-CASOB', '3001112233');
+
+  select to_jsonb(c) into j from caso_con_mismo_telefono(id2) c;
+  assert j is not null, 'caso_con_mismo_telefono no sugiere pese al mismo teléfono reciente';
+  assert j ->> 'codigo' = 'BUS-CASOA', 'caso_con_mismo_telefono no devuelve la búsqueda más vieja como principal';
+  assert not (j ? 'contacto_telefono') and not (j ? 'contacto_medio'), 'caso_con_mismo_telefono expone el contacto';
+
+  -- Con un uuid que no es suyo (al azar), nada: no se pueden sondear teléfonos.
+  select count(*) into n from caso_con_mismo_telefono(gen_random_uuid());
+  assert n = 0, 'caso_con_mismo_telefono responde a un uuid ajeno';
+
+  select unir_mi_busqueda(id2) into v_cod;
+  assert v_cod = 'BUS-CASOA', 'unir_mi_busqueda no unió con la principal';
+  select count(*) into n from consultar_caso('BUS-CASOB');
+  assert n = 2, 'consultar_caso no devuelve las dos búsquedas del caso';
+  select to_jsonb(c) into j from consultar_caso('BUS-CASOB') c limit 1;
+  assert not (j ? 'contacto_telefono'), 'consultar_caso expone contacto_telefono';
+
+  -- «Ya apareció» cierra el caso completo, consultado con cualquiera de los códigos.
+  perform cerrar_busqueda('BUS-CASOB');
+  select count(*) into n from consultar_caso('BUS-CASOA') c where c.estado = 'resuelta';
+  assert n = 2, 'cerrar_busqueda no cerró el caso completo';
+  reset role;
+end $$;
+reset role;
+
 select 'RLS OK: el público no lee contactos ni borra; los voluntarios activos sí trabajan.' as resultado;
