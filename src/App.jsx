@@ -1921,12 +1921,18 @@ export default function App() {
   const [casoSugerido, setCasoSugerido] = useState(null);
   const [casoUnido, setCasoUnido] = useState(null);
 
-  async function buscar() {
+  // Buscar solo calcula: no guarda nada. Así el tutor puede probar varias
+  // combinaciones sin dejar una búsqueda por cada intento (pedido de Lau,
+  // 22-ago-2026). Guardar es una decisión suya, con el botón de abajo.
+  function buscar() {
     const activas = registros.filter((r) => r.estado === "resguardo");
     setResultados(buscarCoincidencias(busqueda, activas));
     setRegistroBusqueda(null);
     setCasoSugerido(null); setCasoUnido(null); setIdBusqueda(null);
-    if (!busqueda.especie) return;
+  }
+
+  async function guardarBusqueda() {
+    if (!busqueda.especie || guardandoBusqueda) return;
     setGuardandoBusqueda(true);
     try {
       // La foto (si la dejo) se sube antes, a su propia carpeta, y se guarda
@@ -1947,8 +1953,9 @@ export default function App() {
           if (parecida && parecida[0]) setCasoSugerido(parecida[0]);
           return;
         }
-        if (!/codigo|unique|duplicate/i.test(error.message || "")) return; // otro error: no insistir
+        if (!/codigo|unique|duplicate/i.test(error.message || "")) break; // otro error: no insistir
       }
+      alert("No se pudo guardar tu búsqueda. Inténtalo de nuevo.");
     } finally {
       setGuardandoBusqueda(false);
     }
@@ -2268,11 +2275,11 @@ export default function App() {
               Si dejas un contacto, autorizas que los voluntarios lo usen solo para avisarte.{" "}
               <a href="/#aviso" onClick={irAlAviso} style={{ color: T.verde }}>Cómo cuidamos tus datos</a>
             </p>
-            <button type="button" onClick={buscar} disabled={guardandoBusqueda} style={{
-              background: guardandoBusqueda ? T.tintaSuave : T.verde, color: T.blanco, border: "none", borderRadius: 10,
-              padding: "16px 26px", fontSize: 17, fontWeight: 680, cursor: guardandoBusqueda ? "wait" : "pointer",
+            <button type="button" onClick={buscar} style={{
+              background: T.verde, color: T.blanco, border: "none", borderRadius: 10,
+              padding: "16px 26px", fontSize: 17, fontWeight: 680, cursor: "pointer",
               marginLeft: 25, marginTop: 6,
-            }}>{guardandoBusqueda ? "Guardando…" : "Buscar coincidencias"}</button>
+            }}>Buscar coincidencias</button>
           </section>
         )}
 
@@ -2288,6 +2295,25 @@ export default function App() {
               }}>Cambiar respuestas</button>
             </div>
 
+            {!registroBusqueda && busqueda.especie && (
+              <div style={{
+                border: `1.5px solid ${T.linea}`, background: T.blanco, borderRadius: 12,
+                padding: "14px 16px", marginBottom: 16, fontSize: 14.5, lineHeight: 1.55,
+              }}>
+                <strong style={{ fontWeight: 660 }}>¿Quieres que guardemos tu búsqueda?</strong>{" "}
+                Hasta ahora solo miraste el listado: nada quedó registrado. Si la guardas, te damos un
+                número de registro, los voluntarios la cruzan con cada animal que llega
+                {busqueda.contacto_telefono
+                  ? <> y te escriben por {busqueda.contacto_medio || "WhatsApp"} si aparece algo parecido.</>
+                  : <>. Como no dejaste contacto, no podremos avisarte: si quieres, vuelve y agrega tu WhatsApp.</>}
+                <div style={{ marginTop: 10 }}>
+                  <button type="button" onClick={guardarBusqueda} disabled={guardandoBusqueda} style={{
+                    background: guardandoBusqueda ? T.tintaSuave : T.verde, color: T.blanco, border: "none", borderRadius: 9,
+                    padding: "10px 15px", fontSize: 14.5, fontWeight: 660, cursor: guardandoBusqueda ? "wait" : "pointer",
+                  }}>{guardandoBusqueda ? "Guardando…" : "Guardar mi búsqueda"}</button>
+                </div>
+              </div>
+            )}
             {registroBusqueda && (
               <div style={{
                 border: `1.5px solid ${T.verde}`, background: T.verdeClaro, borderRadius: 12,
@@ -2348,8 +2374,10 @@ export default function App() {
                 border: `1px solid ${T.linea}`, borderRadius: 12, background: T.blanco,
                 padding: "24px 22px", fontSize: 15, lineHeight: 1.6, color: T.tintaSuave,
               }}>
-                Ningún registro coincide lo suficiente por ahora. Tu búsqueda quedó guardada: si dejaste
-                contacto, los voluntarios te avisan cuando llegue algo parecido.
+                Ningún registro coincide lo suficiente por ahora.
+                {registroBusqueda
+                  ? " Tu búsqueda quedó guardada: si dejaste contacto, los voluntarios te avisan cuando llegue algo parecido."
+                  : " Guarda tu búsqueda (arriba) para que los voluntarios la crucen con cada animal que llegue."}
               </div>
             ) : (
               <>
