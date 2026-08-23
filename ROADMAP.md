@@ -57,6 +57,10 @@ pero no urgente.
       animal sigue en resguardo y sigue cruzando con búsquedas por si aparece
       el tutor. Pendiente: aviso del vigía a los ~45 días sin reencuentro;
       separar voluntarios de administradores (quién puede marcar).
+      **Retirado de la página el 22-ago-2026** (pedido del equipo): ya no hay
+      botón «Dar en adopción», filtro «En adopción» ni etiqueta en las fichas.
+      La tabla `adopciones` y sus filas siguen en la base por si sirven
+      después; si se retoma, se vuelve a conectar la interfaz (PR de ese día).
 - [ ] Refugios, detalle original del plan (19-ago-2026, hecho arriba). Hoy
       «Nombre del refugio o del sitio» es texto libre en cada ficha, así que
       no se puede filtrar bien ni evitar que el mismo refugio quede escrito
