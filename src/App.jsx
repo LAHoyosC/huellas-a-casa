@@ -283,7 +283,7 @@ function Dato({ etiqueta, valor }) {
   );
 }
 
-function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar, onEditar }) {
+function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar, onMostrar, onEditar }) {
   const [copiado, setCopiado] = useState(false);
   const reencontrado = r.estado === "reencontrado";
   const senas = r.senas || [];
@@ -405,6 +405,11 @@ function Detalle({ r, voluntario, onCerrar, onReencontrar, onAprobar, onOcultar,
               <button type="button" onClick={() => onEditar(r)} style={botonSecundario(T.tinta)}>Editar ficha</button>
               <button type="button" onClick={() => onReencontrar(r)} style={botonSecundario(T.tintaSuave)}>Marcar como reencontrado</button>
               <button type="button" onClick={() => { onOcultar(r); onCerrar(); }} style={botonSecundario(T.tintaSuave)}>Ocultar</button>
+            </div>
+          )}
+          {voluntario && reencontrado && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.linea}` }}>
+              <button type="button" onClick={() => onMostrar(r)} style={botonSecundario(T.tintaSuave)}>Volver a resguardo</button>
             </div>
           )}
         </div>
@@ -695,10 +700,17 @@ function Ficha({ r, resultado, nombres, voluntario, onReencontrar, onAprobar, on
               </button>
             )}
             {reencontrado ? (
-              <span style={{
-                fontFamily: MONO, fontSize: 11.5, letterSpacing: ".1em", color: T.verde,
-                border: `1.5px solid ${T.verde}`, padding: "5px 10px", borderRadius: 6,
-              }}>REENCONTRADO</span>
+              <>
+                <span style={{
+                  fontFamily: MONO, fontSize: 11.5, letterSpacing: ".1em", color: T.verde,
+                  border: `1.5px solid ${T.verde}`, padding: "5px 10px", borderRadius: 6,
+                }}>REENCONTRADO</span>
+                {voluntario && (
+                  <button type="button" onClick={() => onMostrar(r)} style={botonSecundario(T.tintaSuave)}>
+                    Volver a resguardo
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 <a
@@ -1767,6 +1779,9 @@ export default function App() {
   }
 
   async function mostrarDeNuevo(r) {
+    // Deshacer un reencuentro cambia lo que ve el público: pedir confirmación.
+    // Pasa cuando se marcó la ficha equivocada (p. ej. PER-0062).
+    if (r.estado === "reencontrado" && !confirm(`¿Volver ${r.codigo} a resguardo? Se marcó como reencontrado y aparecerá de nuevo como perdido/en resguardo.`)) return;
     const { error } = await supabase.from("mascotas").update({ estado: "resguardo" }).eq("id", r.id);
     if (error) { alert("No se pudo volver a mostrar. ¿Tu cuenta está activada como voluntario?"); return; }
     setRegistros((p) => p.map((x) => (x.id === r.id ? { ...x, estado: "resguardo" } : x)));
@@ -2492,7 +2507,7 @@ export default function App() {
       </footer>
       {detalle && (
         <Detalle r={detalle} voluntario={voluntario} onCerrar={cerrarFicha}
-          onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onEditar={editarFicha} />
+          onReencontrar={marcarReencontrado} onAprobar={aprobar} onOcultar={ocultar} onMostrar={mostrarDeNuevo} onEditar={editarFicha} />
       )}
       {voluntario && (
         <button type="button" onClick={() => setVerMisCambios(true)} title="Mis últimos cambios" style={{
