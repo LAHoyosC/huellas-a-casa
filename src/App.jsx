@@ -1970,6 +1970,14 @@ export default function App() {
           ENTORNO DE PRUEBAS — lo que registres aquí no es real y se puede borrar
         </div>
       )}
+      {/* Aviso de cierre (CIERRE.md, paso 1): 15 días para que quien cuida o
+          busca un animal anote los contactos antes de que se borre todo. */}
+      <div role="status" style={{ background: T.ambarClaro, borderBottom: `1px solid ${T.ambar}`, color: T.tinta, textAlign: "center", padding: "10px 16px", fontSize: 14.5, lineHeight: 1.45 }}>
+        <strong style={{ fontWeight: 690 }}>Huellas a Casa termina el 27 de noviembre de 2026.</strong>{" "}
+        Ese día cerramos la página y después borramos toda la información. Si cuidas o buscas un
+        animal, anota desde ya los contactos que necesites. ¿Dudas? Escríbenos a{" "}
+        <a href={`mailto:${CONTACTO_DATOS}`} style={{ color: T.verde }}>{CONTACTO_DATOS}</a>.
+      </div>
       <header style={{ borderBottom: `1px solid ${T.linea}`, background: T.blanco }}>
         <div style={{ maxWidth: 940, margin: "0 auto", padding: "20px 20px 18px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
