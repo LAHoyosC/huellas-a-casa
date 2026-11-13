@@ -50,45 +50,21 @@ await paso(`abre ${URL}`, async () => {
   if (!r || r.status() >= 400) throw new Error(`HTTP ${r?.status()}`);
 });
 
-await paso("pinta la portada (contadores y botones)", async () => {
-  await pagina.getByText("EN RESGUARDO").first().waitFor({ timeout: ESPERA });
-  await pagina.getByRole("button", { name: /Busco a mi mascota/ }).waitFor({ timeout: ESPERA });
-  await pagina.getByRole("button", { name: /Encontré una mascota/ }).waitFor({ timeout: ESPERA });
+// Desde el cierre (12-nov-2026) la página es una sola pantalla. Los pasos
+// de antes (portada, listado, formularios, voluntarios) ya no existen; lo
+// que se comprueba es que el aviso se pinta y que la aplicación no volvió.
+await paso("pinta la pantalla de cierre", async () => {
+  await pagina.getByRole("heading", { name: /Huellas a Casa terminó/ }).waitFor({ timeout: ESPERA });
+  await pagina.getByText(/Borraremos toda la información/).first().waitFor({ timeout: ESPERA });
 });
 
-await paso("carga el listado desde la base (no se queda en «Cargando…»)", async () => {
-  await pagina.getByRole("button", { name: /Ver todos los registros/ }).click();
-  await pagina.getByText("Cargando fichas…").waitFor({ state: "detached", timeout: ESPERA }).catch(() => {});
-  await pagina.getByText("FILTRAR").waitFor({ timeout: ESPERA });
-  const cuerpo = await pagina.textContent("body");
-  if (/No se pudo cargar el listado|no tiene configurada la conexión/.test(cuerpo)) throw new Error("la página dice que no pudo cargar el listado (¿base de datos?)");
-});
-
-await paso("abre «Busco a mi mascota» (formulario del tutor)", async () => {
-  await pagina.getByRole("button", { name: /Busco a mi mascota/ }).click();
-  await pagina.getByText("¿Qué animal es?").first().waitFor({ timeout: ESPERA });
-  await pagina.getByText("Señas particulares").first().waitFor({ timeout: ESPERA });
-});
-
-await paso("abre «Encontré una mascota» (formulario del voluntario)", async () => {
-  await pagina.getByRole("button", { name: /Encontré una mascota/ }).click();
-  await pagina.getByText("¿Dónde está ahora?").first().waitFor({ timeout: ESPERA });
-  await pagina.getByText("Contacto para el tutor").first().waitFor({ timeout: ESPERA });
-});
-
-await paso("abre «¿Cómo va mi búsqueda?»", async () => {
-  await pagina.getByRole("button", { name: /Busco a mi mascota/ }).click();
-  await pagina.getByRole("button", { name: /Consultar mi búsqueda/ }).click();
-  await pagina.getByText("¿Cómo va mi búsqueda?").first().waitFor({ timeout: ESPERA });
-});
-
-await paso("abre la pantalla de voluntarios (inicio de sesión)", async () => {
-  await pagina.getByRole("button", { name: /Voluntarios/ }).first().click();
-  await pagina.getByText(/contraseña/i).first().waitFor({ timeout: ESPERA });
+await paso("ya no ofrece registrar ni buscar", async () => {
+  const botones = await pagina.getByRole("button").count();
+  if (botones > 0) throw new Error(`la pantalla de cierre tiene ${botones} botón(es): ¿volvió la aplicación?`);
 });
 
 await navegador.close();
 if (erroresConsola.length) {
   console.log(`(${erroresConsola.length} console.error no fatales; el primero: ${erroresConsola[0].slice(0, 160)})`);
 }
-console.log("\nPágina OK: carga, lista, formularios y estado del caso funcionan.");
+console.log("\nPágina OK: muestra la pantalla de cierre.");
