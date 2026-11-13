@@ -1578,7 +1578,43 @@ function Zona({ v, set, numero }) {
 
 /* ------------------------------- APP ------------------------------- */
 
+// La iniciativa cerró el 12-nov-2026 (CIERRE.md, paso 2). La página queda
+// solo con este aviso. La aplicación completa sigue abajo (AppAbierta), sin
+// usarse: el código puede servirle a otro grupo en otra emergencia, y así
+// deshacer el cierre es un Revert de un solo PR.
 export default function App() {
+  return (
+    <div style={{ background: T.papel, minHeight: "100vh", fontFamily: FUENTE, color: T.tinta }}>
+      <style>{`* { box-sizing: border-box; } body { margin: 0; }`}</style>
+      <main style={{ maxWidth: 620, margin: "0 auto", padding: "72px 24px" }}>
+        <div style={{ fontFamily: MONO, fontSize: 11.5, letterSpacing: ".18em", color: T.tintaSuave }}>
+          EJE CAFETERO · RISARALDA · QUINDÍO · CALDAS · VALLE
+        </div>
+        <h1 style={{ fontSize: 34, fontWeight: 720, letterSpacing: "-.025em", margin: "14px 0 18px" }}>
+          Huellas a Casa terminó
+        </h1>
+        <p style={{ fontSize: 17, lineHeight: 1.55, margin: "0 0 14px" }}>
+          Esta fue una iniciativa temporal de voluntarios, creada por la emergencia para reunir
+          animales con sus familias. Cerró el 12 de noviembre de 2026.
+        </p>
+        <p style={{ fontSize: 17, lineHeight: 1.55, margin: "0 0 14px" }}>
+          Las fichas, las fotos y los contactos ya no se muestran. Borraremos toda la información
+          en máximo 30 días.
+        </p>
+        <p style={{ fontSize: 17, lineHeight: 1.55, margin: "0 0 14px" }}>
+          Si cuidas o buscas un animal y necesitas un contacto, escríbenos a{" "}
+          <a href={`mailto:${CONTACTO_DATOS}`} style={{ color: T.verde }}>{CONTACTO_DATOS}</a>.
+        </p>
+        <p style={{ fontSize: 17, lineHeight: 1.55, margin: 0, color: T.tintaSuave }}>
+          Gracias a quienes cuidaron, buscaron y compartieron.
+        </p>
+      </main>
+    </div>
+  );
+}
+
+// eslint-disable-next-line no-unused-vars
+function AppAbierta() {
   const [registros, setRegistros] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState("");
